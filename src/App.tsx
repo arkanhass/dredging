@@ -45,6 +45,8 @@ interface Trip {
   trips: number;
   capacityCbm: number;
   totalVolume: number;
+  dredgerRate: number;
+  transporterRate: number;
   dumpingLocation: string;
   notes: string;
 }
@@ -112,16 +114,16 @@ const sampleTransporters: Transporter[] = [
 ];
 
 const sampleTrips: Trip[] = [
-  { id: '1', date: '2024-01-15', dredgerId: '1', transporterId: '1', truckId: 't1', plateNumber: 'ABC-123', trips: 5, capacityCbm: 15, totalVolume: 75, dumpingLocation: 'Site A - North', notes: '' },
-  { id: '2', date: '2024-01-15', dredgerId: '1', transporterId: '1', truckId: 't2', plateNumber: 'ABC-124', trips: 4, capacityCbm: 18, totalVolume: 72, dumpingLocation: 'Site A - South', notes: '' },
-  { id: '3', date: '2024-01-15', dredgerId: '2', transporterId: '2', truckId: 't4', plateNumber: 'XYZ-456', trips: 6, capacityCbm: 20, totalVolume: 120, dumpingLocation: 'Site B - East', notes: '' },
-  { id: '4', date: '2024-01-16', dredgerId: '1', transporterId: '3', truckId: 't6', plateNumber: 'DEF-789', trips: 8, capacityCbm: 16, totalVolume: 128, dumpingLocation: 'Site A - North', notes: '' },
-  { id: '5', date: '2024-01-16', dredgerId: '2', transporterId: '1', truckId: 't3', plateNumber: 'ABC-125', trips: 5, capacityCbm: 15, totalVolume: 75, dumpingLocation: 'Site B - West', notes: '' },
-  { id: '6', date: '2024-01-16', dredgerId: '3', transporterId: '2', truckId: 't5', plateNumber: 'XYZ-457', trips: 7, capacityCbm: 22, totalVolume: 154, dumpingLocation: 'Site C - Central', notes: '' },
-  { id: '7', date: '2024-01-17', dredgerId: '1', transporterId: '2', truckId: 't4', plateNumber: 'XYZ-456', trips: 10, capacityCbm: 20, totalVolume: 200, dumpingLocation: 'Site A - North', notes: '' },
-  { id: '8', date: '2024-01-17', dredgerId: '2', transporterId: '3', truckId: 't7', plateNumber: 'DEF-790', trips: 6, capacityCbm: 16, totalVolume: 96, dumpingLocation: 'Site B - East', notes: '' },
-  { id: '9', date: '2024-01-17', dredgerId: '3', transporterId: '1', truckId: 't1', plateNumber: 'ABC-123', trips: 4, capacityCbm: 15, totalVolume: 60, dumpingLocation: 'Site C - South', notes: '' },
-  { id: '10', date: '2024-01-18', dredgerId: '1', transporterId: '3', truckId: 't8', plateNumber: 'DEF-791', trips: 9, capacityCbm: 18, totalVolume: 162, dumpingLocation: 'Site A - South', notes: '' },
+  { id: '1', date: '2024-01-15', dredgerId: '1', transporterId: '1', truckId: 't1', plateNumber: 'ABC-123', trips: 5, capacityCbm: 15, totalVolume: 75, dredgerRate: 1550, transporterRate: 850, dumpingLocation: 'Site A - North', notes: '' },
+  { id: '2', date: '2024-01-15', dredgerId: '1', transporterId: '1', truckId: 't2', plateNumber: 'ABC-124', trips: 4, capacityCbm: 18, totalVolume: 72, dredgerRate: 1550, transporterRate: 850, dumpingLocation: 'Site A - South', notes: '' },
+  { id: '3', date: '2024-01-15', dredgerId: '2', transporterId: '2', truckId: 't4', plateNumber: 'XYZ-456', trips: 6, capacityCbm: 20, totalVolume: 120, dredgerRate: 1600, transporterRate: 900, dumpingLocation: 'Site B - East', notes: '' },
+  { id: '4', date: '2024-01-16', dredgerId: '1', transporterId: '3', truckId: 't6', plateNumber: 'DEF-789', trips: 8, capacityCbm: 16, totalVolume: 128, dredgerRate: 1550, transporterRate: 775, dumpingLocation: 'Site A - North', notes: '' },
+  { id: '5', date: '2024-01-16', dredgerId: '2', transporterId: '1', truckId: 't3', plateNumber: 'ABC-125', trips: 5, capacityCbm: 15, totalVolume: 75, dredgerRate: 1600, transporterRate: 850, dumpingLocation: 'Site B - West', notes: '' },
+  { id: '6', date: '2024-01-16', dredgerId: '3', transporterId: '2', truckId: 't5', plateNumber: 'XYZ-457', trips: 7, capacityCbm: 22, totalVolume: 154, dredgerRate: 1475, transporterRate: 900, dumpingLocation: 'Site C - Central', notes: '' },
+  { id: '7', date: '2024-01-17', dredgerId: '1', transporterId: '2', truckId: 't4', plateNumber: 'XYZ-456', trips: 10, capacityCbm: 20, totalVolume: 200, dredgerRate: 1550, transporterRate: 900, dumpingLocation: 'Site A - North', notes: '' },
+  { id: '8', date: '2024-01-17', dredgerId: '2', transporterId: '3', truckId: 't7', plateNumber: 'DEF-790', trips: 6, capacityCbm: 16, totalVolume: 96, dredgerRate: 1600, transporterRate: 775, dumpingLocation: 'Site B - East', notes: '' },
+  { id: '9', date: '2024-01-17', dredgerId: '3', transporterId: '1', truckId: 't1', plateNumber: 'ABC-123', trips: 4, capacityCbm: 15, totalVolume: 60, dredgerRate: 1475, transporterRate: 850, dumpingLocation: 'Site C - South', notes: '' },
+  { id: '10', date: '2024-01-18', dredgerId: '1', transporterId: '3', truckId: 't8', plateNumber: 'DEF-791', trips: 9, capacityCbm: 18, totalVolume: 162, dredgerRate: 1550, transporterRate: 775, dumpingLocation: 'Site A - South', notes: '' },
 ];
 
 const samplePayments: Payment[] = [
@@ -180,12 +182,12 @@ const DredgingDashboard: React.FC = () => {
     localStorage.setItem('dredgingDashboard', JSON.stringify({ dredgers, transporters, trips, payments }));
   }, [dredgers, transporters, trips, payments]);
 
-  // Calculations
+  // Calculations - using stored trip rates for historical accuracy
   const calculateDredgerEarnings = (dredgerId: string) => {
     const dredgerTrips = trips.filter(t => t.dredgerId === dredgerId);
     const totalVolume = dredgerTrips.reduce((sum, t) => sum + t.totalVolume, 0);
-    const dredger = dredgers.find(d => d.id === dredgerId);
-    const totalAmount = totalVolume * (dredger?.ratePerCbm || 0);
+    // Use stored trip rate for each trip (historical rate preservation)
+    const totalAmount = dredgerTrips.reduce((sum, t) => sum + (t.totalVolume * (t.dredgerRate || 0)), 0);
     const totalPaid = payments.filter(p => p.entityType === 'dredger' && p.entityId === dredgerId).reduce((sum, p) => sum + p.amount, 0);
     return { totalVolume, totalAmount, totalPaid, balance: totalAmount - totalPaid };
   };
@@ -194,8 +196,8 @@ const DredgingDashboard: React.FC = () => {
     const transporterTrips = trips.filter(t => t.transporterId === transporterId);
     const totalTrips = transporterTrips.reduce((sum, t) => sum + t.trips, 0);
     const totalVolume = transporterTrips.reduce((sum, t) => sum + t.totalVolume, 0);
-    const transporter = transporters.find(t => t.id === transporterId);
-    const totalAmount = totalVolume * (transporter?.ratePerCbm || 0);
+    // Use stored trip rate for each trip (historical rate preservation)
+    const totalAmount = transporterTrips.reduce((sum, t) => sum + (t.totalVolume * (t.transporterRate || 0)), 0);
     const totalPaid = payments.filter(p => p.entityType === 'transporter' && p.entityId === transporterId).reduce((sum, p) => sum + p.amount, 0);
     return { totalTrips, totalVolume, totalAmount, totalPaid, balance: totalAmount - totalPaid };
   };
@@ -203,14 +205,8 @@ const DredgingDashboard: React.FC = () => {
   const overallStats = {
     totalVolume: trips.reduce((sum, t) => sum + t.totalVolume, 0),
     totalTrips: trips.reduce((sum, t) => sum + t.trips, 0),
-    totalDredgerCost: trips.reduce((sum, t) => {
-      const dredger = dredgers.find(d => d.id === t.dredgerId);
-      return sum + (t.totalVolume * (dredger?.ratePerCbm || 0));
-    }, 0),
-    totalTransporterCost: trips.reduce((sum, t) => {
-      const transporter = transporters.find(tr => tr.id === t.transporterId);
-      return sum + (t.totalVolume * (transporter?.ratePerCbm || 0));
-    }, 0),
+    totalDredgerCost: trips.reduce((sum, t) => sum + (t.totalVolume * (t.dredgerRate || 0)), 0),
+    totalTransporterCost: trips.reduce((sum, t) => sum + (t.totalVolume * (t.transporterRate || 0)), 0),
     totalPaid: payments.reduce((sum, p) => sum + p.amount, 0),
   };
 
@@ -240,12 +236,16 @@ const DredgingDashboard: React.FC = () => {
   const saveTrip = () => {
     const allTrucks = transporters.flatMap(t => t.trucks);
     const truck = allTrucks.find(tr => tr.id === tripForm.truckId);
+    const dredger = dredgers.find(d => d.id === tripForm.dredgerId);
+    const transporter = transporters.find(t => t.id === tripForm.transporterId);
     const newTrip: Trip = {
       ...tripForm,
       id: editingItem ? editingItem.id : Date.now().toString(),
       totalVolume: (tripForm.trips || 0) * (truck?.capacityCbm || 0),
       capacityCbm: truck?.capacityCbm || 0,
       plateNumber: truck?.plateNumber || '',
+      dredgerRate: dredger?.ratePerCbm || 0,
+      transporterRate: transporter?.ratePerCbm || 0,
     } as Trip;
     
     if (editingItem) {
@@ -323,8 +323,9 @@ const DredgingDashboard: React.FC = () => {
       csv += 'TR-001,Quick Haul Transport,850,active,Quick Haul Ltd,CNT-2024-101,ABC-124,18\n';
       filename = 'transporters_template.csv';
     } else if (type === 'trips') {
-      csv = 'Date,DredgerId,TransporterId,TruckId,Trips,DumpingLocation,Notes\n';
-      csv += '2024-01-15,1,1,t1,5,Site A - North,\n';
+      csv = 'Date,DredgerId,DredgerCode,TransporterId,TransporterCode,TruckId,Trips,DredgerRate,TransporterRate,DumpingLocation,Notes\n';
+      csv += '2024-01-15,1,DR-001,1,TR-001,t1,5,1500,850,Site A - North,\n';
+      csv += '2024-01-15,1,DR-001,2,TR-002,t5,3,1500,900,Site B - South,\n';
       filename = 'trips_template.csv';
     } else if (type === 'payments') {
       csv = 'Date,EntityType,EntityId,Amount,PaymentMethod,Reference,Notes\n';
@@ -399,16 +400,21 @@ const DredgingDashboard: React.FC = () => {
           const truck = allTrucks.find(t => t.id === row.TruckId || t.id === row.truckId || t.plateNumber === row.PlateNumber || t.plateNumber === row['Plate Number']);
           const capacity = truck?.capacityCbm || parseFloat(row.CapacityCbm || row.capacityCbm || 0);
           const tripsCount = parseInt(row.Trips || row.trips || 0);
+          // Get rates from import or use current rates
+          const dredger = dredgers.find(d => d.id === (row.DredgerId || row.dredgerId) || d.code === row.DredgerCode || d.code === row['Dredger Code']);
+          const transporter = transporters.find(t => t.id === (row.TransporterId || row.transporterId) || t.code === row.TransporterCode || t.code === row['Transporter Code']);
           return {
             id: Date.now().toString() + Math.random(),
             date: row.Date || row.date || new Date().toISOString().split('T')[0],
-            dredgerId: row.DredgerId || row.dredgerId || dredgers[0]?.id || '',
-            transporterId: row.TransporterId || row.transporterId || transporters[0]?.id || '',
+            dredgerId: dredger?.id || row.DredgerId || row.dredgerId || dredgers[0]?.id || '',
+            transporterId: transporter?.id || row.TransporterId || row.transporterId || transporters[0]?.id || '',
             truckId: truck?.id || '',
             plateNumber: truck?.plateNumber || row.PlateNumber || row['Plate Number'] || '',
             trips: tripsCount,
             capacityCbm: capacity,
             totalVolume: tripsCount * capacity,
+            dredgerRate: parseFloat(row.DredgerRate || row['Dredger Rate'] || dredger?.ratePerCbm || 0),
+            transporterRate: parseFloat(row.TransporterRate || row['Transporter Rate'] || transporter?.ratePerCbm || 0),
             dumpingLocation: row.DumpingLocation || row['Dumping Location'] || row.dumpingLocation || '',
             notes: row.Notes || row.notes || '',
           };
@@ -439,11 +445,13 @@ const DredgingDashboard: React.FC = () => {
     let filename = '';
     
     if (type === 'trips') {
-      csv = 'Date,Dredger,Transporter,Plate Number,Trips,Capacity (CBM),Total Volume (CBM),Dumping Location,Notes\n';
+      csv = 'Date,Dredger Code,Dredger,Transporter Code,Transporter,Plate Number,Trips,Capacity (CBM),Total Volume (CBM),Dredger Rate,Transporter Rate,Dredger Amount,Transporter Amount,Dumping Location,Notes\n';
       trips.forEach(t => {
         const dredger = dredgers.find(d => d.id === t.dredgerId);
         const transporter = transporters.find(tr => tr.id === t.transporterId);
-        csv += `${t.date},${dredger?.name || ''},${transporter?.name || ''},${t.plateNumber},${t.trips},${t.capacityCbm},${t.totalVolume},${t.dumpingLocation},${t.notes}\n`;
+        const dredgerAmount = t.totalVolume * (t.dredgerRate || 0);
+        const transporterAmount = t.totalVolume * (t.transporterRate || 0);
+        csv += `${t.date},${dredger?.code || ''},${dredger?.name || ''},${transporter?.code || ''},${transporter?.name || ''},${t.plateNumber},${t.trips},${t.capacityCbm},${t.totalVolume},${t.dredgerRate || 0},${t.transporterRate || 0},${dredgerAmount},${transporterAmount},${t.dumpingLocation},${t.notes}\n`;
       });
       filename = 'trip_report.csv';
     } else if (type === 'dredgers') {
