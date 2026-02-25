@@ -398,7 +398,7 @@ const DredgingDashboard: React.FC = () => {
               { id: 'dredgers', label: 'Dredgers', icon: Ship },
               { id: 'transporters', label: 'Transporters', icon: Truck },
               { id: 'trips', label: 'Daily Trips', icon: Calendar },
-              { id: 'payments', label: '₦ Payments', icon: DollarSign },
+              { id: 'payments', label: '₦ Payments', icon: Activity },
               { id: 'reports', label: 'Reports', icon: FileSpreadsheet },
             ].map(tab => (
               <button
