@@ -62,86 +62,19 @@ interface Payment {
   notes: string;
 }
 
-// Sample Data
-const sampleDredgers: Dredger[] = [
-  { id: '1', name: 'Dredger Alpha', code: 'DR-001', ratePerCbm: 1550, status: 'active', contractor: 'Marine Works Ltd', contractNumber: 'CNT-2024-001' },
-  { id: '2', name: 'Dredger Beta', code: 'DR-002', ratePerCbm: 1600, status: 'active', contractor: 'Ocean Dredge Co', contractNumber: 'CNT-2024-002' },
-  { id: '3', name: 'Dredger Gamma', code: 'DR-003', ratePerCbm: 1475, status: 'active', contractor: 'Sand Masters Inc', contractNumber: 'CNT-2024-003' },
-];
-
-const sampleTransporters: Transporter[] = [
-  { 
-    id: '1', 
-    name: 'Quick Haul Transport', 
-    code: 'TR-001', 
-    ratePerCbm: 850, 
-    status: 'active', 
-    contractor: 'Quick Haul Ltd',
-    contractNumber: 'CNT-2024-101',
-    trucks: [
-      { id: 't1', plateNumber: 'ABC-123', capacityCbm: 15, transporterId: '1', status: 'active' },
-      { id: 't2', plateNumber: 'ABC-124', capacityCbm: 18, transporterId: '1', status: 'active' },
-      { id: 't3', plateNumber: 'ABC-125', capacityCbm: 15, transporterId: '1', status: 'active' },
-    ]
-  },
-  { 
-    id: '2', 
-    name: 'Heavy Duty Logistics', 
-    code: 'TR-002', 
-    ratePerCbm: 900, 
-    status: 'active',
-    contractor: 'Heavy Duty Corp',
-    contractNumber: 'CNT-2024-102',
-    trucks: [
-      { id: 't4', plateNumber: 'XYZ-456', capacityCbm: 20, transporterId: '2', status: 'active' },
-      { id: 't5', plateNumber: 'XYZ-457', capacityCbm: 22, transporterId: '2', status: 'active' },
-    ]
-  },
-  { 
-    id: '3', 
-    name: 'Sand Express', 
-    code: 'TR-003', 
-    ratePerCbm: 775, 
-    status: 'active',
-    contractor: 'Sand Express Inc',
-    contractNumber: 'CNT-2024-103',
-    trucks: [
-      { id: 't6', plateNumber: 'DEF-789', capacityCbm: 16, transporterId: '3', status: 'active' },
-      { id: 't7', plateNumber: 'DEF-790', capacityCbm: 16, transporterId: '3', status: 'active' },
-      { id: 't8', plateNumber: 'DEF-791', capacityCbm: 18, transporterId: '3', status: 'active' },
-    ]
-  },
-];
-
-const sampleTrips: Trip[] = [
-  { id: '1', date: '2024-01-15', dredgerId: '1', transporterId: '1', truckId: 't1', plateNumber: 'ABC-123', trips: 5, capacityCbm: 15, totalVolume: 75, dredgerRate: 1550, transporterRate: 850, dumpingLocation: 'Site A - North', notes: '' },
-  { id: '2', date: '2024-01-15', dredgerId: '1', transporterId: '1', truckId: 't2', plateNumber: 'ABC-124', trips: 4, capacityCbm: 18, totalVolume: 72, dredgerRate: 1550, transporterRate: 850, dumpingLocation: 'Site A - South', notes: '' },
-  { id: '3', date: '2024-01-15', dredgerId: '2', transporterId: '2', truckId: 't4', plateNumber: 'XYZ-456', trips: 6, capacityCbm: 20, totalVolume: 120, dredgerRate: 1600, transporterRate: 900, dumpingLocation: 'Site B - East', notes: '' },
-  { id: '4', date: '2024-01-16', dredgerId: '1', transporterId: '3', truckId: 't6', plateNumber: 'DEF-789', trips: 8, capacityCbm: 16, totalVolume: 128, dredgerRate: 1550, transporterRate: 775, dumpingLocation: 'Site A - North', notes: '' },
-  { id: '5', date: '2024-01-16', dredgerId: '2', transporterId: '1', truckId: 't3', plateNumber: 'ABC-125', trips: 5, capacityCbm: 15, totalVolume: 75, dredgerRate: 1600, transporterRate: 850, dumpingLocation: 'Site B - West', notes: '' },
-  { id: '6', date: '2024-01-16', dredgerId: '3', transporterId: '2', truckId: 't5', plateNumber: 'XYZ-457', trips: 7, capacityCbm: 22, totalVolume: 154, dredgerRate: 1475, transporterRate: 900, dumpingLocation: 'Site C - Central', notes: '' },
-  { id: '7', date: '2024-01-17', dredgerId: '1', transporterId: '2', truckId: 't4', plateNumber: 'XYZ-456', trips: 10, capacityCbm: 20, totalVolume: 200, dredgerRate: 1550, transporterRate: 900, dumpingLocation: 'Site A - North', notes: '' },
-  { id: '8', date: '2024-01-17', dredgerId: '2', transporterId: '3', truckId: 't7', plateNumber: 'DEF-790', trips: 6, capacityCbm: 16, totalVolume: 96, dredgerRate: 1600, transporterRate: 775, dumpingLocation: 'Site B - East', notes: '' },
-  { id: '9', date: '2024-01-17', dredgerId: '3', transporterId: '1', truckId: 't1', plateNumber: 'ABC-123', trips: 4, capacityCbm: 15, totalVolume: 60, dredgerRate: 1475, transporterRate: 850, dumpingLocation: 'Site C - South', notes: '' },
-  { id: '10', date: '2024-01-18', dredgerId: '1', transporterId: '3', truckId: 't8', plateNumber: 'DEF-791', trips: 9, capacityCbm: 18, totalVolume: 162, dredgerRate: 1550, transporterRate: 775, dumpingLocation: 'Site A - South', notes: '' },
-];
-
-const samplePayments: Payment[] = [
-  { id: '1', date: '2024-01-10', entityType: 'dredger', entityId: '1', amount: 5000000, paymentMethod: 'Bank Transfer', reference: 'PAY-2024-001', notes: 'Advance payment' },
-  { id: '2', date: '2024-01-12', entityType: 'transporter', entityId: '1', amount: 3000000, paymentMethod: 'Bank Transfer', reference: 'PAY-2024-002', notes: 'Weekly payment' },
-  { id: '3', date: '2024-01-15', entityType: 'dredger', entityId: '2', amount: 4500000, paymentMethod: 'Check', reference: 'PAY-2024-003', notes: 'Milestone payment' },
-  { id: '4', date: '2024-01-17', entityType: 'transporter', entityId: '2', amount: 2500000, paymentMethod: 'Bank Transfer', reference: 'PAY-2024-004', notes: 'Partial payment' },
-  { id: '5', date: '2024-01-18', entityType: 'dredger', entityId: '1', amount: 3000000, paymentMethod: 'Cash', reference: 'PAY-2024-005', notes: 'Fuel allowance' },
-  { id: '6', date: '2024-01-18', entityType: 'transporter', entityId: '3', amount: 2000000, paymentMethod: 'Bank Transfer', reference: 'PAY-2024-006', notes: 'Weekly payment' },
-];
+// Google Sheets Configuration
+const GOOGLE_SHEETS_CONFIG = {
+  apiKey: 'AIzaSyAYwHOV-1YIa1lAheSZ-fTlh-_UWnWWpgk',
+  spreadsheetId: '1RNPjQ-JxUJiF85pBb-0sqbdkWwmGV1Q23cT5qgFFauM',
+};
 
 const DredgingDashboard: React.FC = () => {
   // State
   const [activeTab, setActiveTab] = useState<'dashboard' | 'dredgers' | 'transporters' | 'trips' | 'payments' | 'reports'>('dashboard');
-  const [dredgers, setDredgers] = useState<Dredger[]>(sampleDredgers);
-  const [transporters, setTransporters] = useState<Transporter[]>(sampleTransporters);
-  const [trips, setTrips] = useState<Trip[]>(sampleTrips);
-  const [payments, setPayments] = useState<Payment[]>(samplePayments);
+  const [dredgers, setDredgers] = useState<Dredger[]>([]);
+  const [transporters, setTransporters] = useState<Transporter[]>([]);
+  const [trips, setTrips] = useState<Trip[]>([]);
+  const [payments, setPayments] = useState<Payment[]>([]);
   
   // Modal states
   const [showDredgerModal, setShowDredgerModal] = useState(false);
@@ -166,21 +99,120 @@ const DredgingDashboard: React.FC = () => {
   const tripsFileInput = useRef<HTMLInputElement>(null);
   const paymentsFileInput = useRef<HTMLInputElement>(null);
 
-  // Load/Save to localStorage
+  // Load data from Google Sheets
   useEffect(() => {
-    const savedData = localStorage.getItem('dredgingDashboard');
-    if (savedData) {
-      const data = JSON.parse(savedData);
-      setDredgers(data.dredgers || sampleDredgers);
-      setTransporters(data.transporters || sampleTransporters);
-      setTrips(data.trips || sampleTrips);
-      setPayments(data.payments || samplePayments);
-    }
+    loadDataFromSheets();
   }, []);
 
-  useEffect(() => {
-    localStorage.setItem('dredgingDashboard', JSON.stringify({ dredgers, transporters, trips, payments }));
-  }, [dredgers, transporters, trips, payments]);
+  const loadDataFromSheets = async () => {
+    try {
+      
+      // Load Dredgers
+      const dredgersResponse = await fetch(
+        `https://sheets.googleapis.com/v4/spreadsheets/${GOOGLE_SHEETS_CONFIG.spreadsheetId}/values/Dredgers?key=${GOOGLE_SHEETS_CONFIG.apiKey}`
+      );
+      const dredgersData = await dredgersResponse.json();
+      const dredgersRows = dredgersData.values || [];
+      const loadedDredgers: Dredger[] = dredgersRows.slice(1).map((row: any[], index: number) => ({
+        id: (row[0] || index).toString(),
+        code: row[0] || `DR-${index}`,
+        name: row[1] || 'Unknown',
+        ratePerCbm: parseFloat(row[2]) || 0,
+        status: (row[3] || 'active').toLowerCase() as 'active' | 'inactive',
+        contractor: row[4] || '',
+        contractNumber: row[5] || '',
+      })).filter((d: Dredger) => d.code);
+      setDredgers(loadedDredgers);
+
+      // Load Transporters
+      const transportersResponse = await fetch(
+        `https://sheets.googleapis.com/v4/spreadsheets/${GOOGLE_SHEETS_CONFIG.spreadsheetId}/values/Transporters?key=${GOOGLE_SHEETS_CONFIG.apiKey}`
+      );
+      const transportersData = await transportersResponse.json();
+      const transportersRows = transportersData.values || [];
+      
+      // Group by transporter code
+      const transporterMap = new Map<string, Transporter>();
+      transportersRows.slice(1).forEach((row: any[], index: number) => {
+        const code = row[0] || `TR-${index}`;
+        if (!transporterMap.has(code)) {
+          transporterMap.set(code, {
+            id: code,
+            code,
+            name: row[1] || 'Unknown',
+            ratePerCbm: parseFloat(row[2]) || 0,
+            status: (row[3] || 'active').toLowerCase() as 'active' | 'inactive',
+            contractor: row[4] || '',
+            contractNumber: row[5] || '',
+            trucks: [],
+          });
+        }
+        // Add truck if plate number exists
+        if (row[6]) {
+          const transporter = transporterMap.get(code)!;
+          transporter.trucks.push({
+            id: `${code}-${row[6]}`,
+            plateNumber: row[6],
+            capacityCbm: parseFloat(row[7]) || 0,
+            transporterId: code,
+            status: 'active',
+          });
+        }
+      });
+      setTransporters(Array.from(transporterMap.values()));
+
+      // Load Trips
+      const tripsResponse = await fetch(
+        `https://sheets.googleapis.com/v4/spreadsheets/${GOOGLE_SHEETS_CONFIG.spreadsheetId}/values/Trips?key=${GOOGLE_SHEETS_CONFIG.apiKey}`
+      );
+      const tripsData = await tripsResponse.json();
+      const tripsRows = tripsData.values || [];
+      const loadedTrips: Trip[] = tripsRows.slice(1).map((row: any[], index: number) => {
+        const dredger = loadedDredgers.find(d => d.code === row[1]);
+        const transporter = Array.from(transporterMap.values()).find(t => t.code === row[2]);
+        const truck = transporter?.trucks.find(tr => tr.plateNumber === row[3]);
+        
+        return {
+          id: `trip-${index}`,
+          date: row[0] || new Date().toISOString().split('T')[0],
+          dredgerId: dredger?.id || '',
+          transporterId: transporter?.id || '',
+          truckId: truck?.id || '',
+          plateNumber: row[3] || '',
+          trips: parseInt(row[4]) || 0,
+          capacityCbm: truck?.capacityCbm || parseFloat(row[5]) || 0,
+          totalVolume: (parseInt(row[4]) || 0) * (truck?.capacityCbm || parseFloat(row[5]) || 0),
+          dredgerRate: parseFloat(row[5]) || dredger?.ratePerCbm || 0,
+          transporterRate: parseFloat(row[6]) || transporter?.ratePerCbm || 0,
+          dumpingLocation: row[7] || '',
+          notes: row[8] || '',
+        };
+      });
+      setTrips(loadedTrips);
+
+      // Load Payments
+      const paymentsResponse = await fetch(
+        `https://sheets.googleapis.com/v4/spreadsheets/${GOOGLE_SHEETS_CONFIG.spreadsheetId}/values/Payments?key=${GOOGLE_SHEETS_CONFIG.apiKey}`
+      );
+      const paymentsData = await paymentsResponse.json();
+      const paymentsRows = paymentsData.values || [];
+      const loadedPayments: Payment[] = paymentsRows.slice(1).map((row: any[], index: number) => ({
+        id: `pay-${index}`,
+        date: row[0] || new Date().toISOString().split('T')[0],
+        entityType: (row[1] || 'dredger').toLowerCase() as 'dredger' | 'transporter',
+        entityId: row[2] || '',
+        amount: parseFloat(row[3]) || 0,
+        paymentMethod: row[4] || 'Bank Transfer',
+        reference: row[5] || `PAY-${index}`,
+        notes: row[6] || '',
+      }));
+      setPayments(loadedPayments);
+      
+    } catch (err) {
+      alert('Failed to load data from Google Sheets. Please check your API key and sheet permissions.');
+      console.error('Error loading data:', err);
+    }
+  };
 
   // Calculations - using stored trip rates for historical accuracy
   const calculateDredgerEarnings = (dredgerId: string) => {
@@ -536,17 +568,11 @@ const DredgingDashboard: React.FC = () => {
             </div>
             <div className="flex items-center space-x-2">
               <button
-                onClick={() => {
-                  localStorage.removeItem('dredgingDashboard');
-                  setDredgers(sampleDredgers);
-                  setTransporters(sampleTransporters);
-                  setTrips(sampleTrips);
-                  setPayments(samplePayments);
-                }}
+                onClick={loadDataFromSheets}
                 className="px-3 py-2 bg-blue-800 hover:bg-blue-700 rounded text-sm flex items-center space-x-1"
               >
                 <Upload className="w-4 h-4" />
-                <span>Reset Data</span>
+                <span>Sync Data</span>
               </button>
             </div>
           </div>
