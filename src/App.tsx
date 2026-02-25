@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Plus, Edit, Trash2, Download, Upload, FileSpreadsheet,
   Ship, Truck, DollarSign, Calendar, BarChart3, Activity
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
 
 // Types
 interface Dredger {
@@ -156,6 +157,12 @@ const DredgingDashboard: React.FC = () => {
   const [transporterForm, setTransporterForm] = useState<Partial<Transporter>>({});
   const [tripForm, setTripForm] = useState<Partial<Trip>>({});
   const [paymentForm, setPaymentForm] = useState<Partial<Payment>>({});
+  
+  // File input refs
+  const dredgerFileInput = useRef<HTMLInputElement>(null);
+  const transporterFileInput = useRef<HTMLInputElement>(null);
+  const tripsFileInput = useRef<HTMLInputElement>(null);
+  const paymentsFileInput = useRef<HTMLInputElement>(null);
 
   // Load/Save to localStorage
   useEffect(() => {
@@ -299,6 +306,131 @@ const DredgingDashboard: React.FC = () => {
       }
       return t;
     }));
+  };
+
+  // Download template
+  const downloadTemplate = (type: 'dredgers' | 'transporters' | 'trips' | 'payments') => {
+    let csv = '';
+    let filename = '';
+    
+    if (type === 'dredgers') {
+      csv = 'Code,Name,RatePerCbm,Status,Contractor,ContractNumber\n';
+      csv += 'DR-001,Dredger Alpha,1550,active,Marine Works Ltd,CNT-2024-001\n';
+      filename = 'dredgers_template.csv';
+    } else if (type === 'transporters') {
+      csv = 'Code,Name,RatePerCbm,Status,Contractor,ContractNumber,PlateNumber,CapacityCbm\n';
+      csv += 'TR-001,Quick Haul Transport,850,active,Quick Haul Ltd,CNT-2024-101,ABC-123,15\n';
+      csv += 'TR-001,Quick Haul Transport,850,active,Quick Haul Ltd,CNT-2024-101,ABC-124,18\n';
+      filename = 'transporters_template.csv';
+    } else if (type === 'trips') {
+      csv = 'Date,DredgerId,TransporterId,TruckId,Trips,DumpingLocation,Notes\n';
+      csv += '2024-01-15,1,1,t1,5,Site A - North,\n';
+      filename = 'trips_template.csv';
+    } else if (type === 'payments') {
+      csv = 'Date,EntityType,EntityId,Amount,PaymentMethod,Reference,Notes\n';
+      csv += '2024-01-10,dredger,1,5000000,Bank Transfer,PAY-2024-001,Advance payment\n';
+      filename = 'payments_template.csv';
+    }
+    
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+  };
+
+  // Import from Excel
+  const handleFileImport = (type: 'dredgers' | 'transporters' | 'trips' | 'payments', file: File) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const data = e.target?.result;
+      const workbook = XLSX.read(data, { type: 'binary' });
+      const sheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[sheetName];
+      const jsonData: any[] = XLSX.utils.sheet_to_json(worksheet);
+      
+      if (type === 'dredgers') {
+        const newDredgers: Dredger[] = jsonData.map((row: any, index: number) => ({
+          id: Date.now().toString() + index,
+          code: row.Code || row.code || `DR-${Date.now()}-${index}`,
+          name: row.Name || row.name || 'Unknown',
+          ratePerCbm: parseFloat(row.RatePerCbm || row.ratePerCbm || row['Rate/CBM'] || 0),
+          status: (row.Status || row.status || 'active').toLowerCase(),
+          contractor: row.Contractor || row.contractor || '',
+          contractNumber: row.ContractNumber || row.contractNumber || row['Contract Number'] || '',
+        }));
+        setDredgers([...dredgers, ...newDredgers]);
+        alert(`Successfully imported ${newDredgers.length} dredgers!`);
+      } else if (type === 'transporters') {
+        // Group by transporter code/name
+        const transporterMap = new Map<string, Transporter>();
+        jsonData.forEach((row: any) => {
+          const code = row.Code || row.code || `TR-${Date.now()}`;
+          if (!transporterMap.has(code)) {
+            transporterMap.set(code, {
+              id: Date.now().toString() + Math.random(),
+              code,
+              name: row.Name || row.name || 'Unknown',
+              ratePerCbm: parseFloat(row.RatePerCbm || row.ratePerCbm || row['Rate/CBM'] || 0),
+              status: (row.Status || row.status || 'active').toLowerCase(),
+              contractor: row.Contractor || row.contractor || '',
+              contractNumber: row.ContractNumber || row.contractNumber || row['Contract Number'] || '',
+              trucks: [],
+            });
+          }
+          const transporter = transporterMap.get(code)!;
+          if (row.PlateNumber || row.plateNumber || row['Plate Number']) {
+            transporter.trucks.push({
+              id: Date.now().toString() + Math.random(),
+              plateNumber: row.PlateNumber || row.plateNumber || row['Plate Number'],
+              capacityCbm: parseFloat(row.CapacityCbm || row.capacityCbm || row['Capacity CBM'] || 0),
+              transporterId: transporter.id,
+              status: 'active',
+            });
+          }
+        });
+        const newTransporters = Array.from(transporterMap.values());
+        setTransporters([...transporters, ...newTransporters]);
+        alert(`Successfully imported ${newTransporters.length} transporters!`);
+      } else if (type === 'trips') {
+        const allTrucks = transporters.flatMap(t => t.trucks);
+        const newTrips: Trip[] = jsonData.map((row: any) => {
+          const truck = allTrucks.find(t => t.id === row.TruckId || t.id === row.truckId || t.plateNumber === row.PlateNumber || t.plateNumber === row['Plate Number']);
+          const capacity = truck?.capacityCbm || parseFloat(row.CapacityCbm || row.capacityCbm || 0);
+          const tripsCount = parseInt(row.Trips || row.trips || 0);
+          return {
+            id: Date.now().toString() + Math.random(),
+            date: row.Date || row.date || new Date().toISOString().split('T')[0],
+            dredgerId: row.DredgerId || row.dredgerId || dredgers[0]?.id || '',
+            transporterId: row.TransporterId || row.transporterId || transporters[0]?.id || '',
+            truckId: truck?.id || '',
+            plateNumber: truck?.plateNumber || row.PlateNumber || row['Plate Number'] || '',
+            trips: tripsCount,
+            capacityCbm: capacity,
+            totalVolume: tripsCount * capacity,
+            dumpingLocation: row.DumpingLocation || row['Dumping Location'] || row.dumpingLocation || '',
+            notes: row.Notes || row.notes || '',
+          };
+        });
+        setTrips([...trips, ...newTrips]);
+        alert(`Successfully imported ${newTrips.length} trips!`);
+      } else if (type === 'payments') {
+        const newPayments: Payment[] = jsonData.map((row: any) => ({
+          id: Date.now().toString() + Math.random(),
+          date: row.Date || row.date || new Date().toISOString().split('T')[0],
+          entityType: (row.EntityType || row.entityType || 'dredger').toLowerCase(),
+          entityId: row.EntityId || row.entityId || row['Entity ID'] || '',
+          amount: parseFloat(row.Amount || row.amount || 0),
+          paymentMethod: row.PaymentMethod || row['Payment Method'] || row.paymentMethod || 'Bank Transfer',
+          reference: row.Reference || row.reference || `PAY-${Date.now()}`,
+          notes: row.Notes || row.notes || '',
+        }));
+        setPayments([...payments, ...newPayments]);
+        alert(`Successfully imported ${newPayments.length} payments!`);
+      }
+    };
+    reader.readAsBinaryString(file);
   };
 
   // Export to Excel (CSV format)
@@ -610,15 +742,42 @@ const DredgingDashboard: React.FC = () => {
         {/* Dredgers Tab */}
         {activeTab === 'dredgers' && (
           <div className="space-y-4">
-            <div className="flex justify-between items-center">
+            <div className="flex justify-between items-center flex-wrap gap-2">
               <h2 className="text-2xl font-bold">Dredgers Management</h2>
-              <button
-                onClick={() => { setEditingItem(null); setDredgerForm({}); setShowDredgerModal(true); }}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2"
-              >
-                <Plus className="w-5 h-5" />
-                <span>Add Dredger</span>
-              </button>
+              <div className="flex space-x-2">
+                <button
+                  onClick={() => downloadTemplate('dredgers')}
+                  className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 flex items-center space-x-2"
+                >
+                  <FileSpreadsheet className="w-5 h-5" />
+                  <span>Download Template</span>
+                </button>
+                <input
+                  ref={dredgerFileInput}
+                  type="file"
+                  accept=".csv,.xlsx,.xls"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleFileImport('dredgers', file);
+                    if (dredgerFileInput.current) dredgerFileInput.current.value = '';
+                  }}
+                />
+                <button
+                  onClick={() => dredgerFileInput.current?.click()}
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center space-x-2"
+                >
+                  <Upload className="w-5 h-5" />
+                  <span>Import Excel</span>
+                </button>
+                <button
+                  onClick={() => { setEditingItem(null); setDredgerForm({}); setShowDredgerModal(true); }}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2"
+                >
+                  <Plus className="w-5 h-5" />
+                  <span>Add Dredger</span>
+                </button>
+              </div>
             </div>
 
             <div className="bg-white rounded-lg shadow overflow-hidden">
@@ -715,15 +874,42 @@ const DredgingDashboard: React.FC = () => {
         {/* Transporters Tab */}
         {activeTab === 'transporters' && (
           <div className="space-y-4">
-            <div className="flex justify-between items-center">
+            <div className="flex justify-between items-center flex-wrap gap-2">
               <h2 className="text-2xl font-bold">Transporters Management</h2>
-              <button
-                onClick={() => { setEditingItem(null); setTransporterForm({}); setShowTransporterModal(true); }}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2"
-              >
-                <Plus className="w-5 h-5" />
-                <span>Add Transporter</span>
-              </button>
+              <div className="flex space-x-2">
+                <button
+                  onClick={() => downloadTemplate('transporters')}
+                  className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 flex items-center space-x-2"
+                >
+                  <FileSpreadsheet className="w-5 h-5" />
+                  <span>Download Template</span>
+                </button>
+                <input
+                  ref={transporterFileInput}
+                  type="file"
+                  accept=".csv,.xlsx,.xls"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleFileImport('transporters', file);
+                    if (transporterFileInput.current) transporterFileInput.current.value = '';
+                  }}
+                />
+                <button
+                  onClick={() => transporterFileInput.current?.click()}
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center space-x-2"
+                >
+                  <Upload className="w-5 h-5" />
+                  <span>Import Excel</span>
+                </button>
+                <button
+                  onClick={() => { setEditingItem(null); setTransporterForm({}); setShowTransporterModal(true); }}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2"
+                >
+                  <Plus className="w-5 h-5" />
+                  <span>Add Transporter</span>
+                </button>
+              </div>
             </div>
 
             <div className="bg-white rounded-lg shadow overflow-hidden">
@@ -863,6 +1049,31 @@ const DredgingDashboard: React.FC = () => {
                   className="px-3 py-2 border rounded-lg"
                 />
                 <button
+                  onClick={() => downloadTemplate('trips')}
+                  className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 flex items-center space-x-2"
+                >
+                  <FileSpreadsheet className="w-5 h-5" />
+                  <span>Template</span>
+                </button>
+                <input
+                  ref={tripsFileInput}
+                  type="file"
+                  accept=".csv,.xlsx,.xls"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleFileImport('trips', file);
+                    if (tripsFileInput.current) tripsFileInput.current.value = '';
+                  }}
+                />
+                <button
+                  onClick={() => tripsFileInput.current?.click()}
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center space-x-2"
+                >
+                  <Upload className="w-5 h-5" />
+                  <span>Import</span>
+                </button>
+                <button
                   onClick={() => { setEditingItem(null); setTripForm({ date: new Date().toISOString().split('T')[0] }); setShowTripModal(true); }}
                   className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2"
                 >
@@ -936,9 +1147,34 @@ const DredgingDashboard: React.FC = () => {
         {/* Payments Tab */}
         {activeTab === 'payments' && (
           <div className="space-y-4">
-            <div className="flex justify-between items-center">
+            <div className="flex justify-between items-center flex-wrap gap-2">
               <h2 className="text-2xl font-bold">Payments Register</h2>
               <div className="flex space-x-2">
+                <button
+                  onClick={() => downloadTemplate('payments')}
+                  className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 flex items-center space-x-2"
+                >
+                  <FileSpreadsheet className="w-5 h-5" />
+                  <span>Template</span>
+                </button>
+                <input
+                  ref={paymentsFileInput}
+                  type="file"
+                  accept=".csv,.xlsx,.xls"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleFileImport('payments', file);
+                    if (paymentsFileInput.current) paymentsFileInput.current.value = '';
+                  }}
+                />
+                <button
+                  onClick={() => paymentsFileInput.current?.click()}
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center space-x-2"
+                >
+                  <Upload className="w-5 h-5" />
+                  <span>Import</span>
+                </button>
                 <button
                   onClick={() => { setEditingItem(null); setPaymentForm({ date: new Date().toISOString().split('T')[0] }); setShowPaymentModal(true); }}
                   className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2"
