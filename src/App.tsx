@@ -323,9 +323,10 @@ const DredgingDashboard: React.FC = () => {
       csv += 'TR-001,Quick Haul Transport,850,active,Quick Haul Ltd,CNT-2024-101,ABC-124,18\n';
       filename = 'transporters_template.csv';
     } else if (type === 'trips') {
-      csv = 'Date,DredgerId,DredgerCode,TransporterId,TransporterCode,TruckId,Trips,DredgerRate,TransporterRate,DumpingLocation,Notes\n';
-      csv += '2024-01-15,1,DR-001,1,TR-001,t1,5,1500,850,Site A - North,\n';
-      csv += '2024-01-15,1,DR-001,2,TR-002,t5,3,1500,900,Site B - South,\n';
+      csv = 'Date,DredgerCode,TransporterCode,PlateNumber,Trips,DredgerRate,TransporterRate,DumpingLocation,Notes\n';
+      csv += '2024-01-15,DR-001,TR-001,ABC-123,5,1500,850,Site A - North,\n';
+      csv += '2024-01-15,DR-001,TR-001,ABC-124,6,1500,850,Site A - South,\n';
+      csv += '2024-01-15,DR-002,TR-002,XYZ-456,10,1600,900,Site B - East,\n';
       filename = 'trips_template.csv';
     } else if (type === 'payments') {
       csv = 'Date,EntityType,EntityId,Amount,PaymentMethod,Reference,Notes\n';
@@ -396,31 +397,54 @@ const DredgingDashboard: React.FC = () => {
         alert(`Successfully imported ${newTransporters.length} transporters!`);
       } else if (type === 'trips') {
         const allTrucks = transporters.flatMap(t => t.trucks);
-        const newTrips: Trip[] = jsonData.map((row: any) => {
-          const truck = allTrucks.find(t => t.id === row.TruckId || t.id === row.truckId || t.plateNumber === row.PlateNumber || t.plateNumber === row['Plate Number']);
+        const errors: string[] = [];
+        const newTrips: Trip[] = jsonData.map((row: any, index: number) => {
+          const dredgerCode = row.DredgerCode || row['Dredger Code'] || row.dredgerCode;
+          const transporterCode = row.TransporterCode || row['Transporter Code'] || row.transporterCode;
+          const plateNumber = row.PlateNumber || row['Plate Number'] || row.plateNumber;
+          
+          const dredger = dredgers.find(d => d.code === dredgerCode);
+          const transporter = transporters.find(t => t.code === transporterCode);
+          const truck = allTrucks.find(t => t.plateNumber === plateNumber);
+          
+          if (!dredger) errors.push(`Row ${index + 2}: Dredger code "${dredgerCode}" not found`);
+          if (!transporter) errors.push(`Row ${index + 2}: Transporter code "${transporterCode}" not found`);
+          if (!truck) errors.push(`Row ${index + 2}: Truck plate "${plateNumber}" not found`);
+          
           const capacity = truck?.capacityCbm || parseFloat(row.CapacityCbm || row.capacityCbm || 0);
           const tripsCount = parseInt(row.Trips || row.trips || 0);
-          // Get rates from import or use current rates
-          const dredger = dredgers.find(d => d.id === (row.DredgerId || row.dredgerId) || d.code === row.DredgerCode || d.code === row['Dredger Code']);
-          const transporter = transporters.find(t => t.id === (row.TransporterId || row.transporterId) || t.code === row.TransporterCode || t.code === row['Transporter Code']);
+          const dredgerRate = parseFloat(row.DredgerRate || row['Dredger Rate'] || dredger?.ratePerCbm || 0);
+          const transporterRate = parseFloat(row.TransporterRate || row['Transporter Rate'] || transporter?.ratePerCbm || 0);
+          
           return {
             id: Date.now().toString() + Math.random(),
             date: row.Date || row.date || new Date().toISOString().split('T')[0],
-            dredgerId: dredger?.id || row.DredgerId || row.dredgerId || dredgers[0]?.id || '',
-            transporterId: transporter?.id || row.TransporterId || row.transporterId || transporters[0]?.id || '',
+            dredgerId: dredger?.id || '',
+            transporterId: transporter?.id || '',
             truckId: truck?.id || '',
-            plateNumber: truck?.plateNumber || row.PlateNumber || row['Plate Number'] || '',
+            plateNumber: plateNumber || '',
             trips: tripsCount,
             capacityCbm: capacity,
             totalVolume: tripsCount * capacity,
-            dredgerRate: parseFloat(row.DredgerRate || row['Dredger Rate'] || dredger?.ratePerCbm || 0),
-            transporterRate: parseFloat(row.TransporterRate || row['Transporter Rate'] || transporter?.ratePerCbm || 0),
+            dredgerRate: dredgerRate,
+            transporterRate: transporterRate,
             dumpingLocation: row.DumpingLocation || row['Dumping Location'] || row.dumpingLocation || '',
             notes: row.Notes || row.notes || '',
           };
         });
-        setTrips([...trips, ...newTrips]);
-        alert(`Successfully imported ${newTrips.length} trips!`);
+        
+        const validTrips = newTrips.filter((_, index) => {
+          const hasErrors = errors.some(e => e.startsWith(`Row ${index + 2}:`));
+          return !hasErrors;
+        });
+        
+        if (errors.length > 0) {
+          alert(`Import completed with ${errors.length} errors:\n\n${errors.slice(0, 10).join('\n')}${errors.length > 10 ? '\n...and more' : ''}\n\n${validTrips.length} trips imported successfully.`);
+        } else {
+          alert(`Successfully imported ${validTrips.length} trips!`);
+        }
+        
+        setTrips([...trips, ...validTrips]);
       } else if (type === 'payments') {
         const newPayments: Payment[] = jsonData.map((row: any) => ({
           id: Date.now().toString() + Math.random(),
