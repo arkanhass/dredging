@@ -242,96 +242,269 @@ const DredgingDashboard: React.FC = () => {
     totalPaid: payments.reduce((sum, p) => sum + p.amount, 0),
   };
 
-  // CRUD Operations
-  const saveDredger = () => {
-    if (editingItem) {
-      setDredgers(dredgers.map(d => d.id === editingItem.id ? { ...d, ...dredgerForm } as Dredger : d));
-    } else {
-      setDredgers([...dredgers, { ...dredgerForm, id: Date.now().toString() } as Dredger]);
+  // Google Apps Script URL
+  const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwTimTnSOaCkAmPxNAAi3Yio12mr5pxYTywcQfx3lhDkZMzCuKm6omq2g_KxtOdYBws7w/exec';
+
+  // CRUD Operations - Now saving to Google Sheets
+  const saveDredger = async () => {
+    try {
+      const dredgerData = {
+        Code: dredgerForm.code,
+        Name: dredgerForm.name,
+        RatePerCbm: dredgerForm.ratePerCbm,
+        Status: dredgerForm.status || 'active',
+        Contractor: dredgerForm.contractor || '',
+        ContractNumber: dredgerForm.contractNumber || '',
+      };
+
+      const response = await fetch(APPS_SCRIPT_URL, {
+        method: 'POST',
+        body: JSON.stringify({ action: 'saveDredger', data: dredgerData }),
+      });
+      const result = await response.json();
+      
+      if (result.success) {
+        await loadDataFromSheets(); // Refresh data from sheets
+        setShowDredgerModal(false);
+        setEditingItem(null);
+        setDredgerForm({});
+        alert('Dredger saved successfully!');
+      } else {
+        alert('Error saving dredger: ' + result.error);
+      }
+    } catch (error) {
+      alert('Error saving dredger: ' + error);
     }
-    setShowDredgerModal(false);
-    setEditingItem(null);
-    setDredgerForm({});
   };
 
-  const saveTransporter = () => {
-    if (editingItem) {
-      setTransporters(transporters.map(t => t.id === editingItem.id ? { ...t, ...transporterForm, trucks: t.trucks } as Transporter : t));
-    } else {
-      setTransporters([...transporters, { ...transporterForm, id: Date.now().toString(), trucks: [] } as Transporter]);
+  const saveTransporter = async () => {
+    try {
+      const transporterData = {
+        Code: transporterForm.code,
+        Name: transporterForm.name,
+        RatePerCbm: transporterForm.ratePerCbm,
+        Status: transporterForm.status || 'active',
+        Contractor: transporterForm.contractor || '',
+        ContractNumber: transporterForm.contractNumber || '',
+        PlateNumber: '', // Will be added separately for trucks
+        CapacityCbm: 0,
+      };
+
+      const response = await fetch(APPS_SCRIPT_URL, {
+        method: 'POST',
+        body: JSON.stringify({ action: 'saveTransporter', data: transporterData }),
+      });
+      const result = await response.json();
+      
+      if (result.success) {
+        await loadDataFromSheets(); // Refresh data from sheets
+        setShowTransporterModal(false);
+        setEditingItem(null);
+        setTransporterForm({});
+        alert('Transporter saved successfully!');
+      } else {
+        alert('Error saving transporter: ' + result.error);
+      }
+    } catch (error) {
+      alert('Error saving transporter: ' + error);
     }
-    setShowTransporterModal(false);
-    setEditingItem(null);
-    setTransporterForm({});
   };
 
-  const saveTrip = () => {
-    const allTrucks = transporters.flatMap(t => t.trucks);
-    const truck = allTrucks.find(tr => tr.id === tripForm.truckId);
-    const dredger = dredgers.find(d => d.id === tripForm.dredgerId);
-    const transporter = transporters.find(t => t.id === tripForm.transporterId);
-    const newTrip: Trip = {
-      ...tripForm,
-      id: editingItem ? editingItem.id : Date.now().toString(),
-      totalVolume: (tripForm.trips || 0) * (truck?.capacityCbm || 0),
-      capacityCbm: truck?.capacityCbm || 0,
-      plateNumber: truck?.plateNumber || '',
-      dredgerRate: dredger?.ratePerCbm || 0,
-      transporterRate: transporter?.ratePerCbm || 0,
-    } as Trip;
+  const saveTrip = async () => {
+    try {
+      const allTrucks = transporters.flatMap(t => t.trucks);
+      const truck = allTrucks.find(tr => tr.id === tripForm.truckId);
+      const dredger = dredgers.find(d => d.id === tripForm.dredgerId);
+      const transporter = transporters.find(t => t.id === tripForm.transporterId);
+      
+      const tripData = {
+        Date: tripForm.date,
+        DredgerCode: dredger?.code || '',
+        TransporterCode: transporter?.code || '',
+        PlateNumber: truck?.plateNumber || '',
+        Trips: tripForm.trips || 0,
+        DredgerRate: dredger?.ratePerCbm || 0,
+        TransporterRate: transporter?.ratePerCbm || 0,
+        DumpingLocation: tripForm.dumpingLocation || '',
+        Notes: tripForm.notes || '',
+        DredgerAmount: (tripForm.trips || 0) * (truck?.capacityCbm || 0) * (dredger?.ratePerCbm || 0),
+        TransporterAmount: (tripForm.trips || 0) * (truck?.capacityCbm || 0) * (transporter?.ratePerCbm || 0),
+      };
+
+      const response = await fetch(APPS_SCRIPT_URL, {
+        method: 'POST',
+        body: JSON.stringify({ action: 'saveTrip', data: tripData }),
+      });
+      const result = await response.json();
+      
+      if (result.success) {
+        await loadDataFromSheets(); // Refresh data from sheets
+        setShowTripModal(false);
+        setEditingItem(null);
+        setTripForm({});
+        alert('Trip saved successfully!');
+      } else {
+        alert('Error saving trip: ' + result.error);
+      }
+    } catch (error) {
+      alert('Error saving trip: ' + error);
+    }
+  };
+
+  const savePayment = async () => {
+    try {
+      const entity = paymentForm.entityType === 'dredger' 
+        ? dredgers.find(d => d.id === paymentForm.entityId)
+        : transporters.find(t => t.id === paymentForm.entityId);
+      
+      const paymentData = {
+        Date: paymentForm.date,
+        EntityType: paymentForm.entityType,
+        EntityCode: entity?.code || '',
+        Amount: paymentForm.amount,
+        PaymentMethod: paymentForm.paymentMethod || 'Bank Transfer',
+        Reference: paymentForm.reference || `PAY-${Date.now()}`,
+        Notes: paymentForm.notes || '',
+      };
+
+      const response = await fetch(APPS_SCRIPT_URL, {
+        method: 'POST',
+        body: JSON.stringify({ action: 'savePayment', data: paymentData }),
+      });
+      const result = await response.json();
+      
+      if (result.success) {
+        await loadDataFromSheets(); // Refresh data from sheets
+        setShowPaymentModal(false);
+        setEditingItem(null);
+        setPaymentForm({});
+        alert('Payment saved successfully!');
+      } else {
+        alert('Error saving payment: ' + result.error);
+      }
+    } catch (error) {
+      alert('Error saving payment: ' + error);
+    }
+  };
+
+  const deleteItem = async (type: 'dredger' | 'transporter' | 'trip' | 'payment', id: string) => {
+    if (!confirm('Are you sure you want to delete this item? This will delete it from Google Sheets permanently.')) return;
     
-    if (editingItem) {
-      setTrips(trips.map(t => t.id === editingItem.id ? newTrip : t));
-    } else {
-      setTrips([...trips, newTrip]);
+    try {
+      let response;
+      let result;
+      
+      if (type === 'dredger') {
+        const dredger = dredgers.find(d => d.id === id);
+        response = await fetch(APPS_SCRIPT_URL, {
+          method: 'POST',
+          body: JSON.stringify({ action: 'deleteDredger', code: dredger?.code }),
+        });
+        result = await response.json();
+        if (result.success) setDredgers(dredgers.filter(d => d.id !== id));
+      } else if (type === 'transporter') {
+        const transporter = transporters.find(t => t.id === id);
+        response = await fetch(APPS_SCRIPT_URL, {
+          method: 'POST',
+          body: JSON.stringify({ action: 'deleteTransporter', code: transporter?.code }),
+        });
+        result = await response.json();
+        if (result.success) setTransporters(transporters.filter(t => t.id !== id));
+      } else if (type === 'trip') {
+        const trip = trips.find(t => t.id === id);
+        response = await fetch(APPS_SCRIPT_URL, {
+          method: 'POST',
+          body: JSON.stringify({ 
+            action: 'deleteTrip', 
+            date: trip?.date,
+            dredgerCode: dredgers.find(d => d.id === trip?.dredgerId)?.code
+          }),
+        });
+        result = await response.json();
+        if (result.success) setTrips(trips.filter(t => t.id !== id));
+      } else if (type === 'payment') {
+        const payment = payments.find(p => p.id === id);
+        response = await fetch(APPS_SCRIPT_URL, {
+          method: 'POST',
+          body: JSON.stringify({ 
+            action: 'deletePayment', 
+            date: payment?.date,
+            reference: payment?.reference
+          }),
+        });
+        result = await response.json();
+        if (result.success) setPayments(payments.filter(p => p.id !== id));
+      }
+      
+      if (result && !result.success) {
+        alert('Error deleting: ' + result.error);
+      } else if (result && result.success) {
+        alert('Deleted successfully!');
+      }
+    } catch (error) {
+      alert('Error deleting: ' + error);
     }
-    setShowTripModal(false);
-    setEditingItem(null);
-    setTripForm({});
   };
 
-  const savePayment = () => {
-    const newPayment: Payment = {
-      ...paymentForm,
-      id: editingItem ? editingItem.id : Date.now().toString(),
-    } as Payment;
-    
-    if (editingItem) {
-      setPayments(payments.map(p => p.id === editingItem.id ? newPayment : p));
-    } else {
-      setPayments([...payments, newPayment]);
-    }
-    setShowPaymentModal(false);
-    setEditingItem(null);
-    setPaymentForm({});
-  };
-
-  const deleteItem = (type: 'dredger' | 'transporter' | 'trip' | 'payment', id: string) => {
-    if (!confirm('Are you sure you want to delete this item?')) return;
-    
-    if (type === 'dredger') setDredgers(dredgers.filter(d => d.id !== id));
-    if (type === 'transporter') setTransporters(transporters.filter(t => t.id !== id));
-    if (type === 'trip') setTrips(trips.filter(t => t.id !== id));
-    if (type === 'payment') setPayments(payments.filter(p => p.id !== id));
-  };
-
-  const addTruck = (transporterId: string) => {
+  const addTruck = async (transporterId: string) => {
     const plateNumber = prompt('Enter truck plate number:');
-    const capacity = prompt('Enter truck capacity (CBM):');
-    if (plateNumber && capacity) {
-      setTransporters(transporters.map(t => {
-        if (t.id === transporterId) {
-          return {
-            ...t,
-            trucks: [...t.trucks, { id: Date.now().toString(), plateNumber, capacityCbm: parseFloat(capacity), transporterId, status: 'active' as const }]
-          };
-        }
-        return t;
-      }));
+    const capacityStr = prompt('Enter truck capacity (CBM):');
+    if (!plateNumber || !capacityStr) return;
+    
+    const capacity = parseFloat(capacityStr);
+    const transporter = transporters.find(t => t.id === transporterId);
+    
+    if (!transporter) {
+      alert('Transporter not found!');
+      return;
+    }
+    
+    try {
+      const truckData = {
+        Code: transporter.code,
+        Name: transporter.name,
+        RatePerCbm: transporter.ratePerCbm,
+        Status: transporter.status,
+        Contractor: transporter.contractor,
+        ContractNumber: transporter.contractNumber,
+        PlateNumber: plateNumber,
+        CapacityCbm: capacity,
+      };
+
+      const response = await fetch(APPS_SCRIPT_URL, {
+        method: 'POST',
+        body: JSON.stringify({ action: 'saveTransporter', data: truckData }),
+      });
+      const result = await response.json();
+      
+      if (result.success) {
+        await loadDataFromSheets(); // Refresh data from sheets
+        alert('Truck added successfully!');
+      } else {
+        alert('Error adding truck: ' + result.error);
+      }
+    } catch (error) {
+      alert('Error adding truck: ' + error);
     }
   };
 
-  const deleteTruck = (transporterId: string, truckId: string) => {
+  const deleteTruck = async (transporterId: string, truckId: string) => {
+    if (!confirm('Delete this truck? Note: This will remove the truck row from Google Sheets.')) return;
+    
+    const transporter = transporters.find(t => t.id === transporterId);
+    const truck = transporter?.trucks.find(tr => tr.id === truckId);
+    
+    if (!transporter || !truck) {
+      alert('Truck not found!');
+      return;
+    }
+    
+    // For trucks, we need to delete the specific row from Transporters sheet
+    // This is complex because multiple trucks can have same transporter code
+    // For now, we'll just refresh and let user know they need to delete manually in Sheets
+    alert('Note: Truck deletion from Google Sheets requires manual action. Please delete the truck row directly in Google Sheets "Transporters" tab, then click "Sync Data" in the dashboard.');
+    
+    // Still remove from local state
     setTransporters(transporters.map(t => {
       if (t.id === transporterId) {
         return { ...t, trucks: t.trucks.filter(tr => tr.id !== truckId) };
