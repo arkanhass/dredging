@@ -447,17 +447,22 @@ const DredgingDashboard: React.FC = () => {
   };
 
   const addTruck = async (transporterId: string) => {
-    const plateNumber = prompt('Enter truck plate number:');
-    const capacityStr = prompt('Enter truck capacity (CBM):');
-    if (!plateNumber || !capacityStr) return;
-    
-    const capacity = parseFloat(capacityStr);
     const transporter = transporters.find(t => t.id === transporterId);
-    
     if (!transporter) {
       alert('Transporter not found!');
       return;
     }
+    
+    const truckName = prompt('Enter truck name (e.g., TP01, WHITE TRUCK):');
+    if (!truckName) return;
+    
+    const plateNumber = prompt('Enter truck plate number:');
+    if (!plateNumber) return;
+    
+    const capacityStr = prompt('Enter truck capacity (CBM):');
+    if (!capacityStr) return;
+    
+    const capacity = parseFloat(capacityStr);
     
     try {
       const truckData = {
@@ -469,22 +474,29 @@ const DredgingDashboard: React.FC = () => {
         ContractNumber: transporter.contractNumber,
         PlateNumber: plateNumber,
         CapacityCbm: capacity,
+        TruckName: truckName, // Store truck name
       };
 
       const response = await fetch(APPS_SCRIPT_URL, {
         method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify({ action: 'saveTransporter', data: truckData }),
       });
+      
       const result = await response.json();
       
       if (result.success) {
         await loadDataFromSheets(); // Refresh data from sheets
         alert('Truck added successfully!');
       } else {
-        alert('Error adding truck: ' + result.error);
+        alert('Error adding truck: ' + (result.error || 'Unknown error'));
+        console.error('Save truck error:', result);
       }
     } catch (error) {
       alert('Error adding truck: ' + error);
+      console.error('Save truck exception:', error);
     }
   };
 
@@ -547,122 +559,197 @@ const DredgingDashboard: React.FC = () => {
     a.click();
   };
 
-  // Import from Excel
-  const handleFileImport = (type: 'dredgers' | 'transporters' | 'trips' | 'payments', file: File) => {
+  // Import from Excel - NOW SAVES TO GOOGLE SHEETS
+  const handleFileImport = async (type: 'dredgers' | 'transporters' | 'trips' | 'payments', file: File) => {
     const reader = new FileReader();
-    reader.onload = (e) => {
-      const data = e.target?.result;
-      const workbook = XLSX.read(data, { type: 'binary' });
-      const sheetName = workbook.SheetNames[0];
-      const worksheet = workbook.Sheets[sheetName];
-      const jsonData: any[] = XLSX.utils.sheet_to_json(worksheet);
-      
-      if (type === 'dredgers') {
-        const newDredgers: Dredger[] = jsonData.map((row: any, index: number) => ({
-          id: Date.now().toString() + index,
-          code: row.Code || row.code || `DR-${Date.now()}-${index}`,
-          name: row.Name || row.name || 'Unknown',
-          ratePerCbm: parseFloat(row.RatePerCbm || row.ratePerCbm || row['Rate/CBM'] || 0),
-          status: (row.Status || row.status || 'active').toLowerCase(),
-          contractor: row.Contractor || row.contractor || '',
-          contractNumber: row.ContractNumber || row.contractNumber || row['Contract Number'] || '',
-        }));
-        setDredgers([...dredgers, ...newDredgers]);
-        alert(`Successfully imported ${newDredgers.length} dredgers!`);
-      } else if (type === 'transporters') {
-        // Group by transporter code/name
-        const transporterMap = new Map<string, Transporter>();
-        jsonData.forEach((row: any) => {
-          const code = row.Code || row.code || `TR-${Date.now()}`;
-          if (!transporterMap.has(code)) {
-            transporterMap.set(code, {
-              id: Date.now().toString() + Math.random(),
-              code,
-              name: row.Name || row.name || 'Unknown',
-              ratePerCbm: parseFloat(row.RatePerCbm || row.ratePerCbm || row['Rate/CBM'] || 0),
-              status: (row.Status || row.status || 'active').toLowerCase(),
-              contractor: row.Contractor || row.contractor || '',
-              contractNumber: row.ContractNumber || row.contractNumber || row['Contract Number'] || '',
-              trucks: [],
-            });
-          }
-          const transporter = transporterMap.get(code)!;
-          if (row.PlateNumber || row.plateNumber || row['Plate Number']) {
-            transporter.trucks.push({
-              id: Date.now().toString() + Math.random(),
-              plateNumber: row.PlateNumber || row.plateNumber || row['Plate Number'],
-              capacityCbm: parseFloat(row.CapacityCbm || row.capacityCbm || row['Capacity CBM'] || 0),
-              transporterId: transporter.id,
-              status: 'active',
-            });
-          }
-        });
-        const newTransporters = Array.from(transporterMap.values());
-        setTransporters([...transporters, ...newTransporters]);
-        alert(`Successfully imported ${newTransporters.length} transporters!`);
-      } else if (type === 'trips') {
-        const allTrucks = transporters.flatMap(t => t.trucks);
+    reader.onload = async (e) => {
+      try {
+        const data = e.target?.result;
+        const workbook = XLSX.read(data, { type: 'binary' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const jsonData: any[] = XLSX.utils.sheet_to_json(worksheet);
+        
+        let successCount = 0;
+        let errorCount = 0;
         const errors: string[] = [];
-        const newTrips: Trip[] = jsonData.map((row: any, index: number) => {
-          const dredgerCode = row.DredgerCode || row['Dredger Code'] || row.dredgerCode;
-          const transporterCode = row.TransporterCode || row['Transporter Code'] || row.transporterCode;
-          const plateNumber = row.PlateNumber || row['Plate Number'] || row.plateNumber;
-          
-          const dredger = dredgers.find(d => d.code === dredgerCode);
-          const transporter = transporters.find(t => t.code === transporterCode);
-          const truck = allTrucks.find(t => t.plateNumber === plateNumber);
-          
-          if (!dredger) errors.push(`Row ${index + 2}: Dredger code "${dredgerCode}" not found`);
-          if (!transporter) errors.push(`Row ${index + 2}: Transporter code "${transporterCode}" not found`);
-          if (!truck) errors.push(`Row ${index + 2}: Truck plate "${plateNumber}" not found`);
-          
-          const capacity = truck?.capacityCbm || parseFloat(row.CapacityCbm || row.capacityCbm || 0);
-          const tripsCount = parseInt(row.Trips || row.trips || 0);
-          const dredgerRate = parseFloat(row.DredgerRate || row['Dredger Rate'] || dredger?.ratePerCbm || 0);
-          const transporterRate = parseFloat(row.TransporterRate || row['Transporter Rate'] || transporter?.ratePerCbm || 0);
-          
-          return {
-            id: Date.now().toString() + Math.random(),
-            date: row.Date || row.date || new Date().toISOString().split('T')[0],
-            dredgerId: dredger?.id || '',
-            transporterId: transporter?.id || '',
-            truckId: truck?.id || '',
-            plateNumber: plateNumber || '',
-            trips: tripsCount,
-            capacityCbm: capacity,
-            totalVolume: tripsCount * capacity,
-            dredgerRate: dredgerRate,
-            transporterRate: transporterRate,
-            dumpingLocation: row.DumpingLocation || row['Dumping Location'] || row.dumpingLocation || '',
-            notes: row.Notes || row.notes || '',
-          };
-        });
         
-        const validTrips = newTrips.filter((_, index) => {
-          const hasErrors = errors.some(e => e.startsWith(`Row ${index + 2}:`));
-          return !hasErrors;
-        });
-        
-        if (errors.length > 0) {
-          alert(`Import completed with ${errors.length} errors:\n\n${errors.slice(0, 10).join('\n')}${errors.length > 10 ? '\n...and more' : ''}\n\n${validTrips.length} trips imported successfully.`);
-        } else {
-          alert(`Successfully imported ${validTrips.length} trips!`);
+        if (type === 'dredgers') {
+          for (let i = 0; i < jsonData.length; i++) {
+            const row = jsonData[i];
+            const dredgerData = {
+              Code: row.Code || row.code || `DR-${Date.now()}-${i}`,
+              Name: row.Name || row.name || 'Unknown',
+              RatePerCbm: parseFloat(row.RatePerCbm || row.ratePerCbm || row['Rate/CBM'] || 0),
+              Status: (row.Status || row.status || 'active').toLowerCase(),
+              Contractor: row.Contractor || row.contractor || '',
+              ContractNumber: row.ContractNumber || row.contractNumber || row['Contract Number'] || '',
+            };
+            
+            try {
+              const response = await fetch(APPS_SCRIPT_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'saveDredger', data: dredgerData }),
+              });
+              const result = await response.json();
+              if (result.success) {
+                successCount++;
+              } else {
+                errorCount++;
+                errors.push(`Row ${i + 2}: ${result.error}`);
+              }
+            } catch (error) {
+              errorCount++;
+              errors.push(`Row ${i + 2}: ${error}`);
+            }
+          }
+          await loadDataFromSheets();
+          alert(`Import complete: ${successCount} dredgers saved to Google Sheets.${errorCount > 0 ? `\n${errorCount} errors: ${errors.slice(0, 5).join(', ')}` : ''}`);
+          
+        } else if (type === 'transporters') {
+          for (let i = 0; i < jsonData.length; i++) {
+            const row = jsonData[i];
+            const transporterData = {
+              Code: row.Code || row.code || `TR-${Date.now()}-${i}`,
+              Name: row.Name || row.name || 'Unknown',
+              RatePerCbm: parseFloat(row.RatePerCbm || row.ratePerCbm || row['Rate/CBM'] || 0),
+              Status: (row.Status || row.status || 'active').toLowerCase(),
+              Contractor: row.Contractor || row.contractor || '',
+              ContractNumber: row.ContractNumber || row.contractNumber || row['Contract Number'] || '',
+              PlateNumber: row.PlateNumber || row.plateNumber || row['Plate Number'] || '',
+              CapacityCbm: parseFloat(row.CapacityCbm || row.capacityCbm || row['Capacity CBM'] || 0),
+            };
+            
+            try {
+              const response = await fetch(APPS_SCRIPT_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'saveTransporter', data: transporterData }),
+              });
+              const result = await response.json();
+              if (result.success) {
+                successCount++;
+              } else {
+                errorCount++;
+                errors.push(`Row ${i + 2}: ${result.error}`);
+              }
+            } catch (error) {
+              errorCount++;
+              errors.push(`Row ${i + 2}: ${error}`);
+            }
+          }
+          await loadDataFromSheets();
+          alert(`Import complete: ${successCount} transporter/truck records saved to Google Sheets.${errorCount > 0 ? `\n${errorCount} errors: ${errors.slice(0, 5).join(', ')}` : ''}`);
+          
+        } else if (type === 'trips') {
+          const allTrucks = transporters.flatMap(t => t.trucks);
+          
+          for (let i = 0; i < jsonData.length; i++) {
+            const row = jsonData[i];
+            const dredgerCode = row.DredgerCode || row['Dredger Code'] || row.dredgerCode;
+            const transporterCode = row.TransporterCode || row['Transporter Code'] || row.transporterCode;
+            const plateNumber = row.PlateNumber || row['Plate Number'] || row.plateNumber;
+            
+            const dredger = dredgers.find(d => d.code === dredgerCode);
+            const transporter = transporters.find(t => t.code === transporterCode);
+            const truck = allTrucks.find(t => t.plateNumber === plateNumber);
+            
+            if (!dredger) {
+              errorCount++;
+              errors.push(`Row ${i + 2}: Dredger code "${dredgerCode}" not found`);
+              continue;
+            }
+            if (!transporter) {
+              errorCount++;
+              errors.push(`Row ${i + 2}: Transporter code "${transporterCode}" not found`);
+              continue;
+            }
+            if (!truck) {
+              errorCount++;
+              errors.push(`Row ${i + 2}: Truck plate "${plateNumber}" not found`);
+              continue;
+            }
+            
+            const capacity = truck?.capacityCbm || 0;
+            const tripsCount = parseInt(row.Trips || row.trips || 0);
+            const dredgerRate = parseFloat(row.DredgerRate || row['Dredger Rate'] || dredger.ratePerCbm || 0);
+            const transporterRate = parseFloat(row.TransporterRate || row['Transporter Rate'] || transporter.ratePerCbm || 0);
+            
+            const tripData = {
+              Date: row.Date || row.date || new Date().toISOString().split('T')[0],
+              DredgerCode: dredger.code,
+              TransporterCode: transporter.code,
+              PlateNumber: plateNumber,
+              Trips: tripsCount,
+              DredgerRate: dredgerRate,
+              TransporterRate: transporterRate,
+              DumpingLocation: row.DumpingLocation || row['Dumping Location'] || row.dumpingLocation || '',
+              Notes: row.Notes || row.notes || '',
+              DredgerAmount: tripsCount * capacity * dredgerRate,
+              TransporterAmount: tripsCount * capacity * transporterRate,
+            };
+            
+            try {
+              const response = await fetch(APPS_SCRIPT_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'saveTrip', data: tripData }),
+              });
+              const result = await response.json();
+              if (result.success) {
+                successCount++;
+              } else {
+                errorCount++;
+                errors.push(`Row ${i + 2}: ${result.error}`);
+              }
+            } catch (error) {
+              errorCount++;
+              errors.push(`Row ${i + 2}: ${error}`);
+            }
+          }
+          await loadDataFromSheets();
+          alert(`Import complete: ${successCount} trips saved to Google Sheets.${errorCount > 0 ? `\n${errorCount} errors: ${errors.slice(0, 5).join(', ')}` : ''}`);
+          
+        } else if (type === 'payments') {
+          for (let i = 0; i < jsonData.length; i++) {
+            const row = jsonData[i];
+            const entityCode = row.EntityCode || row['Entity Code'] || row.entityCode || row.EntityId || row.entityId;
+            
+            const paymentData = {
+              Date: row.Date || row.date || new Date().toISOString().split('T')[0],
+              EntityType: (row.EntityType || row.entityType || 'dredger').toLowerCase(),
+              EntityCode: entityCode,
+              Amount: parseFloat(row.Amount || row.amount || 0),
+              PaymentMethod: row.PaymentMethod || row['Payment Method'] || row.paymentMethod || 'Bank Transfer',
+              Reference: row.Reference || row.reference || `PAY-${Date.now()}-${i}`,
+              Notes: row.Notes || row.notes || '',
+            };
+            
+            try {
+              const response = await fetch(APPS_SCRIPT_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'savePayment', data: paymentData }),
+              });
+              const result = await response.json();
+              if (result.success) {
+                successCount++;
+              } else {
+                errorCount++;
+                errors.push(`Row ${i + 2}: ${result.error}`);
+              }
+            } catch (error) {
+              errorCount++;
+              errors.push(`Row ${i + 2}: ${error}`);
+            }
+          }
+          await loadDataFromSheets();
+          alert(`Import complete: ${successCount} payments saved to Google Sheets.${errorCount > 0 ? `\n${errorCount} errors: ${errors.slice(0, 5).join(', ')}` : ''}`);
         }
-        
-        setTrips([...trips, ...validTrips]);
-      } else if (type === 'payments') {
-        const newPayments: Payment[] = jsonData.map((row: any) => ({
-          id: Date.now().toString() + Math.random(),
-          date: row.Date || row.date || new Date().toISOString().split('T')[0],
-          entityType: (row.EntityType || row.entityType || 'dredger').toLowerCase(),
-          entityId: row.EntityId || row.entityId || row['Entity ID'] || '',
-          amount: parseFloat(row.Amount || row.amount || 0),
-          paymentMethod: row.PaymentMethod || row['Payment Method'] || row.paymentMethod || 'Bank Transfer',
-          reference: row.Reference || row.reference || `PAY-${Date.now()}`,
-          notes: row.Notes || row.notes || '',
-        }));
-        setPayments([...payments, ...newPayments]);
-        alert(`Successfully imported ${newPayments.length} payments!`);
+      } catch (error) {
+        alert('Error importing file: ' + error);
+        console.error('Import error:', error);
       }
     };
     reader.readAsBinaryString(file);
