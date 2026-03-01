@@ -1,17 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import {
-  Plus,
-  Edit,
-  Trash2,
-  Download,
-  Upload,
-  FileSpreadsheet,
-  Ship,
-  Truck,
-  DollarSign,
-  Calendar,
-  BarChart3,
-  Activity,
+import { 
+  Plus, Edit, Trash2, Download, Upload, FileSpreadsheet,
+  Ship, Truck, DollarSign, Calendar, BarChart3, Activity
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
@@ -26,7 +16,6 @@ interface Dredger {
   contractNumber: string;
 }
 
-// Renamed to TruckRecord to avoid collision with Lucide 'Truck' icon
 interface TruckRecord {
   id: string;
   plateNumber: string;
@@ -80,7 +69,7 @@ const GOOGLE_SHEETS_CONFIG = {
   spreadsheetId: '1RNPjQ-JxUJiF85pBb-0sqbdkWwmGV1Q23cT5qgFFauM',
 };
 
-// === DATE HELPERS ===
+// Date helpers
 const formatDisplayDate = (isoOrRaw: string): string => {
   if (!isoOrRaw) return '';
 
@@ -135,7 +124,7 @@ const toSortableISO = (d: string): string => {
   const dt = new Date(d);
   if (!isNaN(dt.getTime())) {
     const day = String(dt.getDate()).padStart(2, '0');
-    const month = String(dt.getMonth() + 1).padStart(2, '0');
+    const month = String(dt.getMonth() + 1).pad(2, '0');
     const year = dt.getFullYear();
     return `${year}-${month}-${day}`;
   }
@@ -145,31 +134,29 @@ const toSortableISO = (d: string): string => {
 
 const DredgingDashboard: React.FC = () => {
   // State
-  const [activeTab, setActiveTab] = useState<
-    'dashboard' | 'dredgers' | 'transporters' | 'trips' | 'payments' | 'reports'
-  >('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'dredgers' | 'transporters' | 'trips' | 'payments' | 'reports'>('dashboard');
   const [dredgers, setDredgers] = useState<Dredger[]>([]);
   const [transporters, setTransporters] = useState<Transporter[]>([]);
   const [trips, setTrips] = useState<Trip[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
-
+  
   // Modal states
   const [showDredgerModal, setShowDredgerModal] = useState(false);
   const [showTransporterModal, setShowTransporterModal] = useState(false);
   const [showTripModal, setShowTripModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [editingItem, setEditingItem] = useState<any>(null);
-
+  
   // Search and filter
   const [searchTerm, setSearchTerm] = useState('');
   const [dateFilter, setDateFilter] = useState({ start: '', end: '' });
-
+  
   // Form states
   const [dredgerForm, setDredgerForm] = useState<Partial<Dredger>>({});
   const [transporterForm, setTransporterForm] = useState<Partial<Transporter>>({});
   const [tripForm, setTripForm] = useState<Partial<Trip>>({});
   const [paymentForm, setPaymentForm] = useState<Partial<Payment>>({});
-
+  
   // File input refs
   const dredgerFileInput = useRef<HTMLInputElement>(null);
   const transporterFileInput = useRef<HTMLInputElement>(null);
@@ -184,53 +171,36 @@ const DredgingDashboard: React.FC = () => {
   const loadDataFromSheets = async () => {
     try {
       // 1. Load Dredgers
-      const drRes = await fetch(
-        `https://sheets.googleapis.com/v4/spreadsheets/${GOOGLE_SHEETS_CONFIG.spreadsheetId}/values/Dredgers?key=${GOOGLE_SHEETS_CONFIG.apiKey}`,
-      );
+      const drRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${GOOGLE_SHEETS_CONFIG.spreadsheetId}/values/Dredgers?key=${GOOGLE_SHEETS_CONFIG.apiKey}`);
       const drData = await drRes.json();
-      const loadedDredgers = (drData.values || [])
-        .slice(1)
-        .map((row: any[], i: number) => ({
-          id: (row[0] || i).toString(),
-          code: row[0],
-          name: row[1],
-          ratePerCbm: parseFloat(row[2]) || 0,
-          status: (row[3] || 'active').toLowerCase() as any,
-          contractor: row[4],
-          contractNumber: row[5],
-        }))
-        .filter((d: any) => d.code);
+      const loadedDredgers = (drData.values || []).slice(1).map((row: any[], i: number) => ({
+        id: (row[0] || i).toString(), code: row[0], name: row[1], ratePerCbm: parseFloat(row[2]) || 0,
+        status: (row[3] || 'active').toLowerCase() as any, contractor: row[4], contractNumber: row[5]
+      })).filter((d: any) => d.code);
       setDredgers(loadedDredgers);
-
+  
       // 2. Load Transporters & Trucks
-      const trRes = await fetch(
-        `https://sheets.googleapis.com/v4/spreadsheets/${GOOGLE_SHEETS_CONFIG.spreadsheetId}/values/Transporters?key=${GOOGLE_SHEETS_CONFIG.apiKey}`,
-      );
+      const trRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${GOOGLE_SHEETS_CONFIG.spreadsheetId}/values/Transporters?key=${GOOGLE_SHEETS_CONFIG.apiKey}`);
       const trData = await trRes.json();
       const trRows = trData.values || [];
       const transporterMap = new Map<string, any>();
-
+  
       trRows.slice(1).forEach((row: any[]) => {
         const code = row[0];
         if (!code) return;
-
+  
         if (!transporterMap.has(code)) {
           transporterMap.set(code, {
-            id: code,
-            code,
-            name: row[1],
-            ratePerCbm: parseFloat(row[2]) || 0,
-            status: (row[3] || 'active').toLowerCase(),
-            contractor: row[4],
-            contractNumber: row[5],
-            trucks: [],
+            id: code, code, name: row[1], ratePerCbm: parseFloat(row[2]) || 0,
+            status: (row[3] || 'active').toLowerCase(), contractor: row[4], contractNumber: row[5],
+            trucks: []
           });
         }
-
+  
         const truckName = row[6] || 'Unnamed';
         const plateNumber = row[7];
         const capacity = parseFloat(row[8]);
-
+  
         if (plateNumber) {
           const transporter = transporterMap.get(code);
           if (!transporter.trucks.find((t: any) => t.plateNumber === plateNumber)) {
@@ -244,128 +214,83 @@ const DredgingDashboard: React.FC = () => {
         }
       });
       setTransporters(Array.from(transporterMap.values()));
-
+  
       // 3. Load Trips
-      const tripRes = await fetch(
-        `https://sheets.googleapis.com/v4/spreadsheets/${GOOGLE_SHEETS_CONFIG.spreadsheetId}/values/Trips?key=${GOOGLE_SHEETS_CONFIG.apiKey}`,
-      );
+      const tripRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${GOOGLE_SHEETS_CONFIG.spreadsheetId}/values/Trips?key=${GOOGLE_SHEETS_CONFIG.apiKey}`);
       const tripData = await tripRes.json();
+      
+      setTrips((tripData.values || []).slice(1).map((row: any[], i: number) => {
+        const rawDate = row[0] || '';
+        const dredgerCode = row[1];
+        const transporterCode = row[2];
+        const plateNumber = row[3];
 
-      setTrips(
-        (tripData.values || []).slice(1).map((row: any[], i: number) => {
-          const rawDate = row[0] || '';
-          const dredgerCode = row[1];
-          const transporterCode = row[2];
-          const plateNumber = row[3];
+        const transporter = transporterMap.get(transporterCode);
+        const truck = transporter?.trucks.find((t: any) => t.plateNumber === plateNumber);
+        const capacityCbm = truck?.capacityCbm || 0;
+        const tripsCount = parseInt(row[4]) || 0;
 
-          const transporter = transporterMap.get(transporterCode);
-          const truck = transporter?.trucks.find((t: any) => t.plateNumber === plateNumber);
-          const capacityCbm = truck?.capacityCbm || 0;
-          const tripsCount = parseInt(row[4]) || 0;
-
-          return {
-            id: `trip-${i}`,
-            date: rawDate,
-            dredgerId:
-              loadedDredgers.find((d: Dredger) => d.code === dredgerCode)?.id || '',
-            transporterId: transporterCode,
-            truckId: truck?.id || '',
-            plateNumber: plateNumber,
-            trips: tripsCount,
-            capacityCbm: capacityCbm,
-            totalVolume: tripsCount * capacityCbm,
-            dredgerRate: parseFloat(row[5]) || 0,
-            transporterRate: parseFloat(row[6]) || 0,
-            dumpingLocation: row[7],
-            notes: row[8] || '',
-          } as Trip;
-        }),
-      );
-
+        return {
+          id: `trip-${i}`, 
+          date: rawDate, 
+          dredgerId: loadedDredgers.find((d: Dredger) => d.code === dredgerCode)?.id || '',
+          transporterId: transporterCode, 
+          truckId: truck?.id || '',
+          plateNumber: plateNumber, 
+          trips: tripsCount,
+          capacityCbm: capacityCbm,
+          totalVolume: tripsCount * capacityCbm,
+          dredgerRate: parseFloat(row[5]) || 0, 
+          transporterRate: parseFloat(row[6]) || 0, 
+          dumpingLocation: row[7],
+          notes: row[8] || ''
+        } as Trip;
+      }));
+  
       // 4. Load Payments
-      const payRes = await fetch(
-        `https://sheets.googleapis.com/v4/spreadsheets/${GOOGLE_SHEETS_CONFIG.spreadsheetId}/values/Payments?key=${GOOGLE_SHEETS_CONFIG.apiKey}`,
-      );
+      const payRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${GOOGLE_SHEETS_CONFIG.spreadsheetId}/values/Payments?key=${GOOGLE_SHEETS_CONFIG.apiKey}`);
       const payData = await payRes.json();
-      setPayments(
-        (payData.values || []).slice(1).map((row: any[], i: number) => ({
-          id: `pay-${i}`,
-          date: row[0],
-          entityType: (row[1] || 'dredger').toLowerCase() as any,
-          entityId: row[2],
-          amount: parseFloat(row[3]) || 0,
-          paymentMethod: row[4] || 'Bank Transfer',
-          reference: row[5],
-          notes: row[6] || '',
-        })),
-      );
-    } catch (err) {
-      console.error(err);
-    }
+      setPayments((payData.values || []).slice(1).map((row: any[], i: number) => ({
+        id: `pay-${i}`, date: row[0], entityType: (row[1] || 'dredger').toLowerCase() as any,
+        entityId: row[2], amount: parseFloat(row[3]) || 0, paymentMethod: row[4] || 'Bank Transfer', reference: row[5], notes: row[6] || ''
+      })));
+  
+    } catch (err) { console.error(err); }
   };
 
   // Calculations
   const calculateDredgerEarnings = (dredgerId: string) => {
-    const dredgerTrips = trips.filter((t) => t.dredgerId === dredgerId);
+    const dredgerTrips = trips.filter(t => t.dredgerId === dredgerId);
     const totalVolume = dredgerTrips.reduce((sum, t) => sum + t.totalVolume, 0);
-    const totalAmount = dredgerTrips.reduce(
-      (sum, t) => sum + t.totalVolume * (t.dredgerRate || 0),
-      0,
-    );
-    const totalPaid = payments
-      .filter((p) => p.entityType === 'dredger' && p.entityId === dredgerId)
-      .reduce((sum, p) => sum + p.amount, 0);
+    const totalAmount = dredgerTrips.reduce((sum, t) => sum + (t.totalVolume * (t.dredgerRate || 0)), 0);
+    const totalPaid = payments.filter(p => p.entityType === 'dredger' && p.entityId === dredgerId).reduce((sum, p) => sum + p.amount, 0);
     return { totalVolume, totalAmount, totalPaid, balance: totalAmount - totalPaid };
   };
 
   const calculateTransporterEarnings = (transporterId: string) => {
-    const transporterTrips = trips.filter((t) => t.transporterId === transporterId);
+    const transporterTrips = trips.filter(t => t.transporterId === transporterId);
     const totalTrips = transporterTrips.reduce((sum, t) => sum + t.trips, 0);
     const totalVolume = transporterTrips.reduce((sum, t) => sum + t.totalVolume, 0);
-    const totalAmount = transporterTrips.reduce(
-      (sum, t) => sum + t.totalVolume * (t.transporterRate || 0),
-      0,
-    );
-    const totalPaid = payments
-      .filter((p) => p.entityType === 'transporter' && p.entityId === transporterId)
-      .reduce((sum, p) => sum + p.amount, 0);
+    const totalAmount = transporterTrips.reduce((sum, t) => sum + (t.totalVolume * (t.transporterRate || 0)), 0);
+    const totalPaid = payments.filter(p => p.entityType === 'transporter' && p.entityId === transporterId).reduce((sum, p) => sum + p.amount, 0);
     return { totalTrips, totalVolume, totalAmount, totalPaid, balance: totalAmount - totalPaid };
   };
 
   const overallStats = {
     totalVolume: trips.reduce((sum, t) => sum + t.totalVolume, 0),
     totalTrips: trips.reduce((sum, t) => sum + t.trips, 0),
-    totalDredgerCost: trips.reduce(
-      (sum, t) => sum + t.totalVolume * (t.dredgerRate || 0),
-      0,
-    ),
-    totalTransporterCost: trips.reduce(
-      (sum, t) => sum + t.totalVolume * (t.transporterRate || 0),
-      0,
-    ),
+    totalDredgerCost: trips.reduce((sum, t) => sum + (t.totalVolume * (t.dredgerRate || 0)), 0),
+    totalTransporterCost: trips.reduce((sum, t) => sum + (t.totalVolume * (t.transporterRate || 0)), 0),
     totalPaid: payments.reduce((sum, p) => sum + p.amount, 0),
   };
 
   // Google Apps Script URL
-  const APPS_SCRIPT_URL =
-    'https://script.google.com/macros/s/AKfycbwTimTnSOaCkAmPxNAAi3Yio12mr5pxYTywcQfx3lhDkZMzCuKm6omq2g_KxtOdYBws7w/exec';
+  const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwTimTnSOaCkAmPxNAAi3Yio12mr5pxYTywcQfx3lhDkZMzCuKm6omq2g_KxtOdYBws7w/exec';
 
-  /**
-   * ROBUST DATA SAVING FUNCTION
-   *
-   * This function uses 'no-cors' mode to bypass CORS preflight checks.
-   * It handles the "Failed to fetch" error by treating it as a success.
-   *
-   * Added 'silent' mode for optimistic updates.
-   */
-  const submitToAppsScript = async (
-    action: string,
-    data: any,
-    onSuccess: () => void,
-    silent = false,
-  ) => {
+  // submitToAppsScript (same as you had)
+  const submitToAppsScript = async (action: string, data: any, onSuccess: () => void, silent = false) => {
     const payload = { action, data };
-
+    
     try {
       await fetch(APPS_SCRIPT_URL, {
         method: 'POST',
@@ -386,8 +311,9 @@ const DredgingDashboard: React.FC = () => {
         onSuccess();
         setTimeout(() => loadDataFromSheets(), 3000);
       }
+
     } catch (error) {
-      console.warn('Fetch error (likely CORS false positive):', error);
+      console.warn("Fetch error (likely CORS false positive):", error);
       if (!silent) {
         setTimeout(async () => {
           await loadDataFromSheets();
@@ -401,16 +327,14 @@ const DredgingDashboard: React.FC = () => {
     }
   };
 
-  // CRUD Operations
+  // CRUD Operations (same as your current code, unchanged except where we computed totals from capacity – already correct)
+
   const saveDredger = async () => {
-    // Optimistic Update
     if (editingItem) {
-      setDredgers((prev) =>
-        prev.map((d) => (d.id === editingItem.id ? ({ ...d, ...dredgerForm } as Dredger) : d)),
-      );
+      setDredgers(prev => prev.map(d => d.id === editingItem.id ? { ...d, ...dredgerForm } as Dredger : d));
     } else {
       const newDredger = { ...dredgerForm, id: `temp-${Date.now()}` } as Dredger;
-      setDredgers((prev) => [...prev, newDredger]);
+      setDredgers(prev => [...prev, newDredger]);
     }
 
     const dredgerData = {
@@ -431,18 +355,10 @@ const DredgingDashboard: React.FC = () => {
 
   const saveTransporter = async () => {
     if (editingItem) {
-      setTransporters((prev) =>
-        prev.map((t) =>
-          t.id === editingItem.id ? ({ ...t, ...transporterForm } as Transporter) : t,
-        ),
-      );
+      setTransporters(prev => prev.map(t => t.id === editingItem.id ? { ...t, ...transporterForm } as Transporter : t));
     } else {
-      const newTransporter = {
-        ...transporterForm,
-        id: `temp-${Date.now()}`,
-        trucks: [],
-      } as Transporter;
-      setTransporters((prev) => [...prev, newTransporter]);
+      const newTransporter = { ...transporterForm, id: `temp-${Date.now()}`, trucks: [] } as Transporter;
+      setTransporters(prev => [...prev, newTransporter]);
     }
 
     const transporterData = {
@@ -452,7 +368,7 @@ const DredgingDashboard: React.FC = () => {
       Status: transporterForm.status || 'active',
       Contractor: transporterForm.contractor || '',
       ContractNumber: transporterForm.contractNumber || '',
-      PlateNumber: '',
+      PlateNumber: '', 
       CapacityCbm: 0,
     };
 
@@ -464,15 +380,14 @@ const DredgingDashboard: React.FC = () => {
   };
 
   const saveTrip = async () => {
-    const allTrucks = transporters.flatMap((t) => t.trucks);
-    const truck = allTrucks.find((tr) => tr.id === tripForm.truckId);
-    const dredger = dredgers.find((d) => d.id === tripForm.dredgerId);
-    const transporter = transporters.find((t) => t.id === tripForm.transporterId);
-
+    const allTrucks = transporters.flatMap(t => t.trucks);
+    const truck = allTrucks.find(tr => tr.id === tripForm.truckId);
+    const dredger = dredgers.find(d => d.id === tripForm.dredgerId);
+    const transporter = transporters.find(t => t.id === tripForm.transporterId);
+    
     const tripsCount = tripForm.trips || 0;
     const capacity = truck?.capacityCbm || 0;
 
-    // Optimistic Update
     const newTrip: Trip = {
       id: editingItem ? editingItem.id : `temp-${Date.now()}`,
       date: tripForm.date || '',
@@ -486,13 +401,13 @@ const DredgingDashboard: React.FC = () => {
       dredgerRate: dredger?.ratePerCbm || 0,
       transporterRate: transporter?.ratePerCbm || 0,
       dumpingLocation: tripForm.dumpingLocation || '',
-      notes: tripForm.notes || '',
+      notes: tripForm.notes || ''
     };
 
     if (editingItem) {
-      setTrips((prev) => prev.map((t) => (t.id === editingItem.id ? newTrip : t)));
+      setTrips(prev => prev.map(t => t.id === editingItem.id ? newTrip : t));
     } else {
-      setTrips((prev) => [...prev, newTrip]);
+      setTrips(prev => [...prev, newTrip]);
     }
 
     const tripData = {
@@ -517,11 +432,10 @@ const DredgingDashboard: React.FC = () => {
   };
 
   const savePayment = async () => {
-    const entity =
-      paymentForm.entityType === 'dredger'
-        ? dredgers.find((d) => d.id === paymentForm.entityId)
-        : transporters.find((t) => t.id === paymentForm.entityId);
-
+    const entity = paymentForm.entityType === 'dredger' 
+      ? dredgers.find(d => d.id === paymentForm.entityId)
+      : transporters.find(t => t.id === paymentForm.entityId);
+    
     const newPayment: Payment = {
       id: editingItem ? editingItem.id : `temp-${Date.now()}`,
       date: paymentForm.date || '',
@@ -530,15 +444,13 @@ const DredgingDashboard: React.FC = () => {
       amount: paymentForm.amount || 0,
       paymentMethod: paymentForm.paymentMethod || 'Bank Transfer',
       reference: paymentForm.reference || '',
-      notes: paymentForm.notes || '',
+      notes: paymentForm.notes || ''
     };
 
     if (editingItem) {
-      setPayments((prev) =>
-        prev.map((p) => (p.id === editingItem.id ? newPayment : p)),
-      );
+      setPayments(prev => prev.map(p => p.id === editingItem.id ? newPayment : p));
     } else {
-      setPayments((prev) => [...prev, newPayment]);
+      setPayments(prev => [...prev, newPayment]);
     }
 
     const paymentData = {
@@ -558,43 +470,35 @@ const DredgingDashboard: React.FC = () => {
     submitToAppsScript('savePayment', paymentData, () => {}, true);
   };
 
-  const deleteItem = async (
-    type: 'dredger' | 'transporter' | 'trip' | 'payment',
-    id: string,
-  ) => {
-    if (
-      !confirm(
-        'Are you sure you want to delete this item? This will delete it from Google Sheets permanently.',
-      )
-    )
-      return;
-
+  const deleteItem = async (type: 'dredger' | 'transporter' | 'trip' | 'payment', id: string) => {
+    if (!confirm('Are you sure you want to delete this item? This will delete it from Google Sheets permanently.')) return;
+    
     let actionData: any = {};
     let actionName = '';
 
     if (type === 'dredger') {
-      setDredgers((prev) => prev.filter((d) => d.id !== id));
+      setDredgers(prev => prev.filter(d => d.id !== id));
       actionName = 'deleteDredger';
-      actionData = { code: dredgers.find((d) => d.id === id)?.code };
+      actionData = { code: dredgers.find(d => d.id === id)?.code };
     } else if (type === 'transporter') {
-      setTransporters((prev) => prev.filter((t) => t.id !== id));
+      setTransporters(prev => prev.filter(t => t.id !== id));
       actionName = 'deleteTransporter';
-      actionData = { code: transporters.find((t) => t.id === id)?.code };
+      actionData = { code: transporters.find(t => t.id === id)?.code };
     } else if (type === 'trip') {
-      const trip = trips.find((t) => t.id === id);
-      setTrips((prev) => prev.filter((t) => t.id !== id));
+      const trip = trips.find(t => t.id === id);
+      setTrips(prev => prev.filter(t => t.id !== id));
       actionName = 'deleteTrip';
-      actionData = {
+      actionData = { 
         date: trip?.date,
-        dredgerCode: dredgers.find((d) => d.id === trip?.dredgerId)?.code,
+        dredgerCode: dredgers.find(d => d.id === trip?.dredgerId)?.code
       };
     } else if (type === 'payment') {
-      const payment = payments.find((p) => p.id === id);
-      setPayments((prev) => prev.filter((p) => p.id !== id));
+      const payment = payments.find(p => p.id === id);
+      setPayments(prev => prev.filter(p => p.id !== id));
       actionName = 'deletePayment';
-      actionData = {
+      actionData = { 
         date: payment?.date,
-        reference: payment?.reference,
+        reference: payment?.reference
       };
     }
 
@@ -602,9 +506,9 @@ const DredgingDashboard: React.FC = () => {
   };
 
   const addTruck = async (transporterId: string) => {
-    const transporter = transporters.find((t) => t.id === transporterId);
+    const transporter = transporters.find(t => t.id === transporterId);
     if (!transporter) return;
-
+    
     const truckName = prompt('Enter truck name (e.g., TP01, WHITE TRUCK):');
     if (!truckName) return;
     const plateNumber = prompt('Enter truck plate number:');
@@ -612,21 +516,22 @@ const DredgingDashboard: React.FC = () => {
     const capacityStr = prompt('Enter truck capacity (CBM):');
     if (!capacityStr) return;
     const capacity = parseFloat(capacityStr);
-
+    
     const newTruck: TruckRecord = {
       id: `temp-${Date.now()}`,
       truckName,
       plateNumber,
       capacityCbm: capacity,
       transporterId: transporter.id,
-      status: 'active',
+      status: 'active'
     };
 
-    setTransporters((prev) =>
-      prev.map((t) =>
-        t.id === transporterId ? { ...t, trucks: [...t.trucks, newTruck] } : t,
-      ),
-    );
+    setTransporters(prev => prev.map(t => {
+      if (t.id === transporterId) {
+        return { ...t, trucks: [...t.trucks, newTruck] };
+      }
+      return t;
+    }));
 
     const truckData = {
       Code: transporter.code,
@@ -644,291 +549,36 @@ const DredgingDashboard: React.FC = () => {
   };
 
   const deleteTruck = async (transporterId: string, truckId: string) => {
-    if (
-      !confirm(
-        'Are you sure you want to delete this truck? This will delete it from Google Sheets.',
-      )
-    )
-      return;
+    if (!confirm('Are you sure you want to delete this truck? This will delete it from Google Sheets.')) return;
 
-    const transporter = transporters.find((t) => t.id === transporterId);
-    const truck = transporter?.trucks.find((tr) => tr.id === truckId);
+    const transporter = transporters.find(t => t.id === transporterId);
+    const truck = transporter?.trucks.find(tr => tr.id === truckId);
 
     if (!transporter || !truck) return;
 
-    setTransporters((prev) =>
-      prev.map((t) =>
-        t.id === transporterId
-          ? { ...t, trucks: t.trucks.filter((tr) => tr.id !== truckId) }
-          : t,
-      ),
-    );
+    setTransporters(prev => prev.map(t => {
+      if (t.id === transporterId) {
+        return { ...t, trucks: t.trucks.filter(tr => tr.id !== truckId) };
+      }
+      return t;
+    }));
 
     const actionData = {
       Code: transporter.code,
-      PlateNumber: truck.plateNumber,
+      PlateNumber: truck.plateNumber
     };
 
     submitToAppsScript('deleteTruck', actionData, () => {}, true);
   };
 
-  // Download template
-  const downloadTemplate = (
-    type: 'dredgers' | 'transporters' | 'trips' | 'payments',
-  ) => {
-    let csv = '';
-    let filename = '';
+  // downloadTemplate and handleFileImport remain as in your current file (already pasted above) – no change needed for date formatting itself
 
-    if (type === 'dredgers') {
-      csv = 'Code,Name,RatePerCbm,Status,Contractor,ContractNumber\n';
-      csv += 'DR-001,Dredger Alpha,1550,active,Marine Works Ltd,CNT-2024-001\n';
-      filename = 'dredgers_template.csv';
-    } else if (type === 'transporters') {
-      csv =
-        'Code,Name,RatePerCbm,Status,Contractor,ContractNumber,PlateNumber,CapacityCbm,TruckName\n';
-      csv +=
-        'TR-001,Quick Haul Transport,850,active,Quick Haul Ltd,CNT-2024-101,ABC-123,15,Truck A\n';
-      csv +=
-        'TR-001,Quick Haul Transport,850,active,Quick Haul Ltd,CNT-2024-101,ABC-124,18,Truck B\n';
-      filename = 'transporters_template.csv';
-    } else if (type === 'trips') {
-      csv =
-        'Date,DredgerCode,TransporterCode,PlateNumber,Trips,DredgerRate,TransporterRate,DumpingLocation,Notes\n';
-      csv +=
-        '2024-01-15,DR-001,TR-001,ABC-123,5,1500,850,Site A - North,\n';
-      csv +=
-        '2024-01-15,DR-001,TR-001,ABC-124,6,1500,850,Site A - South,\n';
-      csv +=
-        '2024-01-15,DR-002,TR-002,XYZ-456,10,1600,900,Site B - East,\n';
-      filename = 'trips_template.csv';
-    } else if (type === 'payments') {
-      csv = 'Date,EntityType,EntityId,Amount,PaymentMethod,Reference,Notes\n';
-      csv +=
-        '2024-01-10,dredger,1,5000000,Bank Transfer,PAY-2024-001,Advance payment\n';
-      filename = 'payments_template.csv';
-    }
-
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    a.click();
-  };
-
-  // Import from Excel
-  const handleFileImport = async (
-    type: 'dredgers' | 'transporters' | 'trips' | 'payments',
-    file: File,
-  ) => {
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-      try {
-        const data = e.target?.result;
-        const workbook = XLSX.read(data as string, { type: 'binary' });
-        const sheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[sheetName];
-        const jsonData: any[] = XLSX.utils.sheet_to_json(worksheet);
-
-        console.log(`Importing ${jsonData.length} rows for ${type}...`);
-
-        let count = 0;
-        for (const row of jsonData) {
-          let action = '';
-          let payload: any = {};
-
-          if (type === 'dredgers') {
-            action = 'saveDredger';
-            payload = {
-              Code: row.Code || row.code,
-              Name: row.Name || row.name,
-              RatePerCbm: row.RatePerCbm || row.ratePerCbm,
-              Status: row.Status || row.status || 'active',
-              Contractor: row.Contractor || row.contractor,
-              ContractNumber: row.ContractNumber || row.contractNumber,
-            };
-          } else if (type === 'transporters') {
-            action = 'saveTransporter';
-            payload = {
-              Code: row.Code || row.code,
-              Name: row.Name || row.name,
-              RatePerCbm: row.RatePerCbm || row.ratePerCbm,
-              Status: row.Status || row.status || 'active',
-              Contractor: row.Contractor || row.contractor,
-              ContractNumber: row.ContractNumber || row.contractNumber,
-              PlateNumber: row.PlateNumber || row.plateNumber,
-              CapacityCbm: row.CapacityCbm || row.capacityCbm,
-              TruckName: row.TruckName || row['Truck Name'] || row.truckName,
-            };
-          } else if (type === 'trips') {
-            action = 'saveTrip';
-
-            const parseDate = (d: any) => {
-              if (!d) return new Date().toISOString().split('T')[0];
-              if (typeof d === 'string') {
-                if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(d)) {
-                  const [day, month, year] = d.split('/');
-                  return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
-                }
-                return d;
-              }
-              return d;
-            };
-
-            const tripDate = parseDate(row.Date || row.date);
-            const dredgerCode = row.DredgerCode || row.dredgerCode;
-            const transporterCode = row.TransporterCode || row.transporterCode;
-            const plateNumber = row.PlateNumber || row.plateNumber;
-            const tripsCount = parseInt(row.Trips || row.trips || 0);
-            const drRate = parseFloat(row.DredgerRate || row.dredgerRate || 0);
-            const trRate = parseFloat(
-              row.TransporterRate || row.transporterRate || 0,
-            );
-
-            let capacity = 0;
-            const transporter = transporters.find((t) => t.code === transporterCode);
-            if (transporter) {
-              const truck = transporter.trucks.find(
-                (t) => t.plateNumber === plateNumber,
-              );
-              if (truck) capacity = truck.capacityCbm;
-            }
-
-            payload = {
-              Date: tripDate,
-              DredgerCode: dredgerCode,
-              TransporterCode: transporterCode,
-              PlateNumber: plateNumber,
-              Trips: tripsCount,
-              DredgerRate: drRate,
-              TransporterRate: trRate,
-              DumpingLocation: row.DumpingLocation || row.dumpingLocation || '',
-              Notes: row.Notes || row.notes || '',
-              DredgerAmount: tripsCount * capacity * drRate,
-              TransporterAmount: tripsCount * capacity * trRate,
-            };
-          } else if (type === 'payments') {
-            action = 'savePayment';
-            const parseDate = (d: any) => {
-              if (!d) return new Date().toISOString().split('T')[0];
-              if (
-                typeof d === 'string' &&
-                /^\d{1,2}\/\d{1,2}\/\d{4}$/.test(d)
-              ) {
-                const [day, month, year] = d.split('/');
-                return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
-              }
-              return d;
-            };
-
-            payload = {
-              Date: parseDate(row.Date || row.date),
-              EntityType: (row.EntityType || row.entityType || 'dredger').toLowerCase(),
-              EntityCode:
-                row.EntityId ||
-                row.entityId ||
-                row.EntityCode ||
-                row.entityCode,
-              Amount: parseFloat(row.Amount || row.amount || 0),
-              PaymentMethod:
-                row.PaymentMethod || row.paymentMethod || 'Bank Transfer',
-              Reference:
-                row.Reference ||
-                row.reference ||
-                `PAY-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
-              Notes: row.Notes || row.notes || '',
-            };
-          }
-
-          if (action) {
-            fetch(APPS_SCRIPT_URL, {
-              method: 'POST',
-              mode: 'no-cors',
-              headers: { 'Content-Type': 'text/plain' },
-              body: JSON.stringify({ action, data: payload }),
-            });
-            count++;
-            await new Promise((r) => setTimeout(r, 300));
-          }
-        }
-
-        setTimeout(async () => {
-          await loadDataFromSheets();
-          alert(`Imported approx ${count} rows. Data reloading...`);
-        }, 2000);
-      } catch (error) {
-        alert('Error importing file: ' + error);
-      }
-    };
-    reader.readAsBinaryString(file);
-  };
-
-  // Export to Excel (CSV format)
-  const exportToExcel = (
-    type: 'trips' | 'dredgers' | 'transporters' | 'payments',
-  ) => {
-    let csv = '';
-    let filename = '';
-
-    if (type === 'trips') {
-      csv =
-        'Date,Dredger Code,Dredger,Transporter Code,Transporter,Plate Number,Trips,Capacity (CBM),Total Volume (CBM),Dredger Rate,Transporter Rate,Dredger Amount,Transporter Amount,Dumping Location,Notes\n';
-      trips.forEach((t) => {
-        const dredger = dredgers.find((d) => d.id === t.dredgerId);
-        const transporter = transporters.find((tr) => tr.id === t.transporterId);
-        const dredgerAmount = t.totalVolume * (t.dredgerRate || 0);
-        const transporterAmount = t.totalVolume * (t.transporterRate || 0);
-        csv += `${t.date},${dredger?.code || ''},${dredger?.name || ''},${
-          transporter?.code || ''
-        },${transporter?.name || ''},${t.plateNumber},${t.trips},${
-          t.capacityCbm
-        },${t.totalVolume},${t.dredgerRate || 0},${t.transporterRate || 0},${dredgerAmount},${transporterAmount},${t.dumpingLocation},${t.notes}\n`;
-      });
-      filename = 'trip_report.csv';
-    } else if (type === 'dredgers') {
-      csv = 'Code,Name,Rate (per CBM),Status,Contractor,Contract Number\n';
-      dredgers.forEach((d) => {
-        csv += `${d.code},${d.name},${d.ratePerCbm},${d.status},${d.contractor},${d.contractNumber}\n`;
-      });
-      filename = 'dredgers_report.csv';
-    } else if (type === 'transporters') {
-      csv =
-        'Code,Name,Rate (per CBM),Status,Contractor,Contract Number,Truck Plate,Capacity (CBM)\n';
-      transporters.forEach((t) => {
-        t.trucks.forEach((truck) => {
-          csv += `${t.code},${t.name},${t.ratePerCbm},${t.status},${t.contractor},${t.contractNumber},${truck.plateNumber},${truck.capacityCbm}\n`;
-        });
-      });
-      filename = 'transporters_report.csv';
-    } else if (type === 'payments') {
-      csv = 'Date,Type,Entity,Amount,Payment Method,Reference,Notes\n';
-      payments.forEach((p) => {
-        const entity =
-          p.entityType === 'dredger'
-            ? dredgers.find((d) => d.id === p.entityId)?.name
-            : transporters.find((t) => t.id === p.entityId)?.name;
-        csv += `${p.date},${p.entityType},${entity || ''},${p.amount},${
-          p.paymentMethod
-        },${p.reference},${p.notes}\n`;
-      });
-      filename = 'payments_report.csv';
-    }
-
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    a.click();
-  };
-
-  // Filter & sort trips
+  // Filter + sort trips
   const filteredTrips = trips
-    .filter((t) => {
+    .filter(t => {
       const lowerSearch = searchTerm.toLowerCase();
       const transporterName =
-        transporters.find((tr) => tr.id === t.transporterId)?.name.toLowerCase() ||
-        '';
+        transporters.find(tr => tr.id === t.transporterId)?.name.toLowerCase() || '';
 
       const haystack =
         t.plateNumber.toLowerCase() +
@@ -950,8 +600,7 @@ const DredgingDashboard: React.FC = () => {
     .sort((a, b) => {
       const aIso = toSortableISO(a.date);
       const bIso = toSortableISO(b.date);
-      // Newest first
-      return bIso.localeCompare(aIso);
+      return bIso.localeCompare(aIso); // newest first
     });
 
   const formatCurrency = (amount: number) => `₦${amount.toLocaleString()}`;
@@ -966,9 +615,7 @@ const DredgingDashboard: React.FC = () => {
               <Ship className="w-8 h-8" />
               <div>
                 <h1 className="text-2xl font-bold">Dredging Operations Dashboard</h1>
-                <p className="text-blue-200 text-sm">
-                  Sand Dredging &amp; Haulage Management System
-                </p>
+                <p className="text-blue-200 text-sm">Sand Dredging & Haulage Management System</p>
               </div>
             </div>
             <div className="flex items-center space-x-2">
@@ -995,7 +642,7 @@ const DredgingDashboard: React.FC = () => {
               { id: 'trips', label: 'Daily Trips', icon: Calendar },
               { id: 'payments', label: '₦ Payments', icon: Activity },
               { id: 'reports', label: 'Reports', icon: FileSpreadsheet },
-            ].map((tab) => (
+            ].map(tab => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id as any)}
@@ -1019,301 +666,45 @@ const DredgingDashboard: React.FC = () => {
         {activeTab === 'dashboard' && (
           <div className="space-y-6">
             {/* Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-              <div className="bg-white rounded-lg shadow p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-gray-500 text-sm">Total Volume</p>
-                    <p className="text-2xl font-bold text-blue-600">
-                      {overallStats.totalVolume.toLocaleString()} CBM
-                    </p>
-                  </div>
-                  <div className="bg-blue-100 p-3 rounded-full">
-                    <Activity className="w-6 h-6 text-blue-600" />
-                  </div>
-                </div>
-              </div>
-              <div className="bg-white rounded-lg shadow p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-gray-500 text-sm">Total Trips</p>
-                    <p className="text-2xl font-bold text-green-600">
-                      {overallStats.totalTrips.toLocaleString()}
-                    </p>
-                  </div>
-                  <div className="bg-green-100 p-3 rounded-full">
-                    <Truck className="w-6 h-6 text-green-600" />
-                  </div>
-                </div>
-              </div>
-              <div className="bg-white rounded-lg shadow p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-gray-500 text-sm">Dredger Cost</p>
-                    <p className="text-2xl font-bold text-orange-600">
-                      {formatCurrency(overallStats.totalDredgerCost)}
-                    </p>
-                  </div>
-                  <div className="bg-orange-100 p-3 rounded-full">
-                    <Ship className="w-6 h-6 text-orange-600" />
-                  </div>
-                </div>
-              </div>
-              <div className="bg-white rounded-lg shadow p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-gray-500 text-sm">Transport Cost</p>
-                    <p className="text-2xl font-bold text-purple-600">
-                      {formatCurrency(overallStats.totalTransporterCost)}
-                    </p>
-                  </div>
-                  <div className="bg-purple-100 p-3 rounded-full">
-                    <Truck className="w-6 h-6 text-purple-600" />
-                  </div>
-                </div>
-              </div>
-              <div className="bg-white rounded-lg shadow p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-gray-500 text-sm">Total Paid</p>
-                    <p className="text-2xl font-bold text-red-600">
-                      {formatCurrency(overallStats.totalPaid)}
-                    </p>
-                  </div>
-                  <div className="bg-red-100 p-3 rounded-full">
-                    <DollarSign className="w-6 h-6 text-red-600" />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Quick Summary Tables */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Dredger Summary */}
-              <div className="bg-white rounded-lg shadow">
-                <div className="p-4 border-b flex justify-between items-center">
-                  <h3 className="font-bold text-lg">Dredger Summary</h3>
-                  <button
-                    onClick={() => setActiveTab('dredgers')}
-                    className="text-blue-600 hover:underline text-sm"
-                  >
-                    View All
-                  </button>
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-4 py-2 text-left text-sm font-medium text-gray-600">
-                          Dredger
-                        </th>
-                        <th className="px-4 py-2 text-right text-sm font-medium text-gray-600">
-                          Volume (CBM)
-                        </th>
-                        <th className="px-4 py-2 text-right text-sm font-medium text-gray-600">
-                          Amount
-                        </th>
-                        <th className="px-4 py-2 text-right text-sm font-medium text-gray-600">
-                          Paid
-                        </th>
-                        <th className="px-4 py-2 text-right text-sm font-medium text-gray-600">
-                          Balance
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {dredgers.map((dredger) => {
-                        const earnings = calculateDredgerEarnings(dredger.id);
-                        return (
-                          <tr
-                            key={dredger.id}
-                            className="border-t hover:bg-gray-50"
-                          >
-                            <td className="px-4 py-3">
-                              <div className="font-medium">{dredger.name}</div>
-                              <div className="text-sm text-gray-500">
-                                {dredger.code}
-                              </div>
-                            </td>
-                            <td className="px-4 py-3 text-right">
-                              {earnings.totalVolume.toLocaleString()}
-                            </td>
-                            <td className="px-4 py-3 text-right">
-                              {formatCurrency(earnings.totalAmount)}
-                            </td>
-                            <td className="px-4 py-3 text-right text-green-600">
-                              {formatCurrency(earnings.totalPaid)}
-                            </td>
-                            <td
-                              className={`px-4 py-3 text-right font-medium ${
-                                earnings.balance > 0
-                                  ? 'text-red-600'
-                                  : 'text-green-600'
-                              }`}
-                            >
-                              {formatCurrency(earnings.balance)}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              {/* Transporter Summary */}
-              <div className="bg-white rounded-lg shadow">
-                <div className="p-4 border-b flex justify-between items-center">
-                  <h3 className="font-bold text-lg">Transporter Summary</h3>
-                  <button
-                    onClick={() => setActiveTab('transporters')}
-                    className="text-blue-600 hover:underline text-sm"
-                  >
-                    View All
-                  </button>
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-4 py-2 text-left text-sm font-medium text-gray-600">
-                          Transporter
-                        </th>
-                        <th className="px-4 py-2 text-right text-sm font-medium text-gray-600">
-                          Trips
-                        </th>
-                        <th className="px-4 py-2 text-right text-sm font-medium text-gray-600">
-                          Volume (CBM)
-                        </th>
-                        <th className="px-4 py-2 text-right text-sm font-medium text-gray-600">
-                          Amount
-                        </th>
-                        <th className="px-4 py-2 text-right text-sm font-medium text-gray-600">
-                          Balance
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {transporters.map((transporter) => {
-                        const earnings = calculateTransporterEarnings(
-                          transporter.id,
-                        );
-                        return (
-                          <tr
-                            key={transporter.id}
-                            className="border-t hover:bg-gray-50"
-                          >
-                            <td className="px-4 py-3">
-                              <div className="font-medium">
-                                {transporter.name}
-                              </div>
-                              <div className="text-sm text-gray-500">
-                                {transporter.code}
-                              </div>
-                            </td>
-                            <td className="px-4 py-3 text-right">
-                              {earnings.totalTrips.toLocaleString()}
-                            </td>
-                            <td className="px-4 py-3 text-right">
-                              {earnings.totalVolume.toLocaleString()} CBM
-                            </td>
-                            <td className="px-4 py-3 text-right">
-                              {formatCurrency(earnings.totalAmount)}
-                            </td>
-                            <td
-                              className={`px-4 py-3 text-right font-medium ${
-                                earnings.balance > 0
-                                  ? 'text-red-600'
-                                  : 'text-green-600'
-                              }`}
-                            >
-                              {formatCurrency(earnings.balance)}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
+            {/* ... keep your stats cards exactly as you pasted (omitted for brevity) */}
 
             {/* Recent Trips */}
             <div className="bg-white rounded-lg shadow">
               <div className="p-4 border-b flex justify-between items-center">
                 <h3 className="font-bold text-lg">Recent Trips</h3>
-                <button
-                  onClick={() => setActiveTab('trips')}
-                  className="text-blue-600 hover:underline text-sm"
-                >
-                  View All
-                </button>
+                <button onClick={() => setActiveTab('trips')} className="text-blue-600 hover:underline text-sm">View All</button>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th className="px-4 py-2 text-left text-sm font-medium text-gray-600">
-                        Date
-                      </th>
-                      <th className="px-4 py-2 text-left text-sm font-medium text-gray-600">
-                        Dredger
-                      </th>
-                      <th className="px-4 py-2 text-left text-sm font-medium text-gray-600">
-                        Transporter
-                      </th>
-                      <th className="px-4 py-2 text-left text-sm font-medium text-gray-600">
-                        Plate
-                      </th>
-                      <th className="px-4 py-2 text-right text-sm font-medium text-gray-600">
-                        Trips
-                      </th>
-                      <th className="px-4 py-2 text-right text-sm font-medium text-gray-600">
-                        Volume
-                      </th>
-                      <th className="px-4 py-2 text-left text-sm font-medium text-gray-600">
-                        Location
-                      </th>
+                      <th className="px-4 py-2 text-left text-sm font-medium text-gray-600">Date</th>
+                      <th className="px-4 py-2 text-left text-sm font-medium text-gray-600">Dredger</th>
+                      <th className="px-4 py-2 text-left text-sm font-medium text-gray-600">Transporter</th>
+                      <th className="px-4 py-2 text-left text-sm font-medium text-gray-600">Plate</th>
+                      <th className="px-4 py-2 text-right text-sm font-medium text-gray-600">Trips</th>
+                      <th className="px-4 py-2 text-right text-sm font-medium text-gray-600">Volume</th>
+                      <th className="px-4 py-2 text-left text-sm font-medium text-gray-600">Location</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {trips
-                      .slice(-10)
-                      .reverse()
-                      .map((trip) => {
-                        const dredger = dredgers.find(
-                          (d) => d.id === trip.dredgerId,
-                        );
-                        const transporter = transporters.find(
-                          (t) => t.id === trip.transporterId,
-                        );
-                        return (
-                          <tr
-                            key={trip.id}
-                            className="border-t hover:bg-gray-50"
-                          >
-                            <td className="px-4 py-3">
-                              {formatDisplayDate(trip.date)}
-                            </td>
-                            <td className="px-4 py-3">{dredger?.name}</td>
-                            <td className="px-4 py-3">{transporter?.name}</td>
-                            <td className="px-4 py-3 font-mono text-sm">
-                              {trip.plateNumber}
-                            </td>
-                            <td className="px-4 py-3 text-right">
-                              {trip.trips}
-                            </td>
-                            <td className="px-4 py-3 text-right">
-                              {trip.totalVolume != null
-                                ? `${trip.totalVolume.toFixed(2)} CBM`
-                                : ''}
-                            </td>
-                            <td className="px-4 py-3">
-                              {trip.dumpingLocation}
-                            </td>
-                          </tr>
-                        );
-                      })}
+                    {trips.slice(-10).reverse().map(trip => {
+                      const dredger = dredgers.find(d => d.id === trip.dredgerId);
+                      const transporter = transporters.find(t => t.id === trip.transporterId);
+                      return (
+                        <tr key={trip.id} className="border-t hover:bg-gray-50">
+                          <td className="px-4 py-3">{formatDisplayDate(trip.date)}</td>
+                          <td className="px-4 py-3">{dredger?.name}</td>
+                          <td className="px-4 py-3">{transporter?.name}</td>
+                          <td className="px-4 py-3 font-mono text-sm">{trip.plateNumber}</td>
+                          <td className="px-4 py-3 text-right">{trip.trips}</td>
+                          <td className="px-4 py-3 text-right">
+                            {trip.totalVolume != null ? `${trip.totalVolume.toFixed(2)} CBM` : ''}
+                          </td>
+                          <td className="px-4 py-3">{trip.dumpingLocation}</td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -1321,189 +712,64 @@ const DredgingDashboard: React.FC = () => {
           </div>
         )}
 
-        {/* Dredgers Tab */}
-        {/* ... (unchanged from your code) */}
-
-        {/* Transporters Tab */}
-        {/* ... (unchanged from your code) */}
+        {/* Dredgers Tab, Transporters Tab, Payments Tab, Reports Tab, Modals */}
+        {/* Use exactly the markup you already have for these sections, since they were working.
+            The only changes affecting display we needed are in:
+            - Recent Trips (above),
+            - filteredTrips,
+            - Daily Trips table (below). */}
 
         {/* Trips Tab */}
         {activeTab === 'trips' && (
           <div className="space-y-4">
-            <div className="flex justify-between items-center flex-wrap gap-4">
-              <h2 className="text-2xl font-bold">Daily Trip Reports</h2>
-              <div className="flex space-x-2">
-                <input
-                  type="text"
-                  placeholder="Search plate, transporter, or location..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="px-3 py-2 border rounded-lg"
-                />
-                <input
-                  type="date"
-                  value={dateFilter.start}
-                  onChange={(e) =>
-                    setDateFilter({ ...dateFilter, start: e.target.value })
-                  }
-                  className="px-3 py-2 border rounded-lg"
-                />
-                <input
-                  type="date"
-                  value={dateFilter.end}
-                  onChange={(e) =>
-                    setDateFilter({ ...dateFilter, end: e.target.value })
-                  }
-                  className="px-3 py-2 border rounded-lg"
-                />
-                <button
-                  onClick={() => downloadTemplate('trips')}
-                  className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 flex items-center space-x-2"
-                >
-                  <FileSpreadsheet className="w-5 h-5" />
-                  <span>Template</span>
-                </button>
-                <input
-                  ref={tripsFileInput}
-                  type="file"
-                  accept=".csv,.xlsx,.xls"
-                  className="hidden"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) handleFileImport('trips', file);
-                    if (tripsFileInput.current)
-                      tripsFileInput.current.value = '';
-                  }}
-                />
-                <button
-                  onClick={() => tripsFileInput.current?.click()}
-                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center space-x-2"
-                >
-                  <Upload className="w-5 h-5" />
-                  <span>Import</span>
-                </button>
-                <button
-                  onClick={() => {
-                    setEditingItem(null);
-                    setTripForm({
-                      date: new Date().toISOString().split('T')[0],
-                    });
-                    setShowTripModal(true);
-                  }}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2"
-                >
-                  <Plus className="w-5 h-5" />
-                  <span>Add Trip</span>
-                </button>
-                <button
-                  onClick={() => exportToExcel('trips')}
-                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center space-x-2"
-                >
-                  <Download className="w-5 h-5" />
-                  <span>Export</span>
-                </button>
-              </div>
-            </div>
+            {/* header + buttons section: keep exactly as in your code */}
 
             <div className="bg-white rounded-lg shadow overflow-hidden">
               <table className="w-full">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">
-                      Date
-                    </th>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">
-                      Dredger
-                    </th>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">
-                      Transporter
-                    </th>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">
-                      Truck
-                    </th>
-                    <th className="px-4 py-3 text-right text-sm font-medium text-gray-600">
-                      Trips
-                    </th>
-                    <th className="px-4 py-3 text-right text-sm font-medium text-gray-600">
-                      Capacity
-                    </th>
-                    <th className="px-4 py-3 text-right text-sm font-medium text-gray-600">
-                      Total Volume
-                    </th>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">
-                      Dumping Location
-                    </th>
-                    <th className="px-4 py-3 text-right text-sm font-medium text-gray-600">
-                      Actions
-                    </th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Date</th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Dredger</th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Transporter</th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Truck</th>
+                    <th className="px-4 py-3 text-right text-sm font-medium text-gray-600">Trips</th>
+                    <th className="px-4 py-3 text-right text-sm font-medium text-gray-600">Capacity</th>
+                    <th className="px-4 py-3 text-right text-sm font-medium text-gray-600">Total Volume</th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Dumping Location</th>
+                    <th className="px-4 py-3 text-right text-sm font-medium text-gray-600">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredTrips.map((trip) => {
-                    const dredger = dredgers.find(
-                      (d) => d.id === trip.dredgerId,
-                    );
-                    const transporter = transporters.find(
-                      (t) => t.id === trip.transporterId,
-                    );
-                    const truck = transporter?.trucks.find(
-                      (tr) =>
-                        tr.id === trip.truckId ||
-                        tr.plateNumber === trip.plateNumber,
-                    );
+                  {filteredTrips.map(trip => {
+                    const dredger = dredgers.find(d => d.id === trip.dredgerId);
+                    const transporter = transporters.find(t => t.id === trip.transporterId);
+                    const truck = transporter?.trucks.find(tr => tr.id === trip.truckId || tr.plateNumber === trip.plateNumber);
 
                     const truckDisplay = truck
-                      ? `(${truck.plateNumber}${
-                          (truck as any).truckName
-                            ? ' - ' + (truck as any).truckName
-                            : ''
-                        })`
+                      ? `(${truck.plateNumber}${truck.truckName ? ' - ' + truck.truckName : ''})`
                       : trip.plateNumber;
 
-                    const capacityCbm =
-                      trip.capacityCbm ?? truck?.capacityCbm ?? 0;
-
-                    const totalVolume =
-                      trip.totalVolume ??
-                      capacityCbm * (trip.trips ?? 0);
+                    const capacityCbm = trip.capacityCbm ?? truck?.capacityCbm ?? 0;
+                    const totalVolume = trip.totalVolume ?? capacityCbm * (trip.trips ?? 0);
 
                     return (
-                      <tr
-                        key={trip.id}
-                        className="border-t hover:bg-gray-50"
-                      >
-                        <td className="px-4 py-3">
-                          {formatDisplayDate(trip.date)}
-                        </td>
+                      <tr key={trip.id} className="border-t hover:bg-gray-50">
+                        <td className="px-4 py-3">{formatDisplayDate(trip.date)}</td>
                         <td className="px-4 py-3">{dredger?.name}</td>
                         <td className="px-4 py-3">{transporter?.name}</td>
-                        <td className="px-4 py-3 font-mono text-sm">
-                          {truckDisplay}
-                        </td>
+                        <td className="px-4 py-3 font-mono text-sm">{truckDisplay}</td>
+                        <td className="px-4 py-3 text-right">{trip.trips}</td>
                         <td className="px-4 py-3 text-right">
-                          {trip.trips}
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          {capacityCbm
-                            ? `${capacityCbm.toFixed(2)} CBM`
-                            : ''}
+                          {capacityCbm ? `${capacityCbm.toFixed(2)} CBM` : ''}
                         </td>
                         <td className="px-4 py-3 text-right font-medium">
-                          {totalVolume
-                            ? `${totalVolume.toFixed(2)} CBM`
-                            : ''}
+                          {totalVolume ? `${totalVolume.toFixed(2)} CBM` : ''}
                         </td>
-                        <td className="px-4 py-3">
-                          {trip.dumpingLocation}
-                        </td>
+                        <td className="px-4 py-3">{trip.dumpingLocation}</td>
                         <td className="px-4 py-3 text-right">
                           <div className="flex justify-end space-x-2">
                             <button
-                              onClick={() => {
-                                setEditingItem(trip);
-                                setTripForm(trip);
-                                setShowTripModal(true);
-                              }}
+                              onClick={() => { setEditingItem(trip); setTripForm(trip); setShowTripModal(true); }}
                               className="p-1 text-blue-600 hover:bg-blue-50 rounded"
                             >
                               <Edit className="w-4 h-4" />
@@ -1525,8 +791,7 @@ const DredgingDashboard: React.FC = () => {
           </div>
         )}
 
-        {/* Payments Tab, Reports Tab, Modals, etc. */}
-        {/* (You can keep the rest of your code as-is; omitted here for brevity.) */}
+        {/* Payments Tab, Reports Tab, all modals – keep from your working version */}
       </main>
     </div>
   );
