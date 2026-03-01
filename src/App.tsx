@@ -455,9 +455,15 @@ const DredgingDashboard: React.FC = () => {
 
   const savePayment = async (e?: React.FormEvent) => {
     if(e) e.preventDefault();
-    const entity = paymentForm.entityType === 'dredger' 
-      ? dredgers.find(d => d.id === paymentForm.entityId)
-      : transporters.find(t => t.id === paymentForm.entityId);
+    
+    let entityCode = '';
+    if (paymentForm.entityType === 'dredger') {
+      const entity = dredgers.find(d => d.id === paymentForm.entityId);
+      entityCode = entity?.code || '';
+    } else {
+      // For transporters, the entityId is the Contractor Name itself
+      entityCode = paymentForm.entityId || '';
+    }
     
     const newPayment: Payment = {
       id: editingItem ? editingItem.id : `temp-${Date.now()}`,
@@ -479,7 +485,7 @@ const DredgingDashboard: React.FC = () => {
     const paymentData = {
       Date: paymentForm.date,
       EntityType: paymentForm.entityType,
-      EntityCode: entity?.code || '',
+      EntityCode: entityCode,
       Amount: paymentForm.amount,
       PaymentMethod: paymentForm.paymentMethod || 'Bank Transfer',
       Reference: paymentForm.reference || `PAY-${Date.now()}`,
@@ -790,8 +796,13 @@ const DredgingDashboard: React.FC = () => {
     } else if (type === 'payments') {
       csv = 'Date,Type,Entity,Amount,Payment Method,Reference,Notes\n';
       payments.forEach(p => {
-        const entity = p.entityType === 'dredger' ? dredgers.find(d => d.id === p.entityId)?.name : transporters.find(t => t.id === p.entityId)?.name;
-        csv += `${p.date},${p.entityType},${entity || ''},${p.amount},${p.paymentMethod},${p.reference},${p.notes}\n`;
+        let entityName = '';
+        if (p.entityType === 'dredger') {
+             entityName = dredgers.find(d => d.id === p.entityId)?.name || '';
+        } else {
+             entityName = p.entityId; // For transporters, entityId is the Contractor Name
+        }
+        csv += `${p.date},${p.entityType},${entityName},${p.amount},${p.paymentMethod},${p.reference},${p.notes}\n`;
       });
       filename = 'payments_report.csv';
     }
@@ -1038,8 +1049,8 @@ const DredgingDashboard: React.FC = () => {
               {/* Transporter Summary (Grouped by Contractor) */}
               <div className="bg-white rounded-lg shadow">
                 <div className="p-4 border-b flex justify-between items-center">
-                  <h3 className="font-bold text-lg">Contractor Summary</h3>
-                  <button onClick={() => setActiveTab('transporters')} className="text-blue-600 hover:underline text-sm">View All Transporters</button>
+                  <h3 className="font-bold text-lg">Transporter Summary</h3>
+                  <button onClick={() => setActiveTab('transporters')} className="text-blue-600 hover:underline text-sm">View All</button>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full">
@@ -1053,36 +1064,49 @@ const DredgingDashboard: React.FC = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {Array.from(new Set(transporters.map(t => t.contractor || 'Unassigned'))).map(contractorName => {
-                        // Find all transporters for this contractor
-                        const contractorTransporters = transporters.filter(t => (t.contractor || 'Unassigned') === contractorName);
-                        
-                        // Sum up stats
-                        const stats = contractorTransporters.reduce((acc, curr) => {
-                            const tStats = calculateTransporterEarnings(curr.id, dashboardTrips, dashboardPayments);
-                            return {
-                                trips: acc.trips + tStats.totalTrips,
-                                volume: acc.volume + tStats.totalVolume,
-                                amount: acc.amount + tStats.totalAmount,
-                                balance: acc.balance + tStats.balance
-                            };
-                        }, { trips: 0, volume: 0, amount: 0, balance: 0 });
+                      {(() => {
+                        // Normalize and Group Contractors
+                        const contractorGroups = new Map<string, { displayName: string, transporters: Transporter[] }>();
 
-                        return (
-                          <tr key={contractorName} className="border-t hover:bg-gray-50">
-                            <td className="px-4 py-3">
-                              <div className="font-medium">{contractorName}</div>
-                              <div className="text-xs text-gray-500">{contractorTransporters.length} Transporter(s)</div>
-                            </td>
-                            <td className="px-4 py-3 text-right">{stats.trips.toLocaleString()}</td>
-                            <td className="px-4 py-3 text-right">{stats.volume.toLocaleString()}</td>
-                            <td className="px-4 py-3 text-right">{formatCurrency(stats.amount)}</td>
-                            <td className={`px-4 py-3 text-right font-medium ${stats.balance > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                              {formatCurrency(stats.balance)}
-                            </td>
-                          </tr>
-                        );
-                      })}
+                        transporters.forEach(t => {
+                           const rawName = t.contractor && t.contractor.trim() ? t.contractor : 'Unassigned';
+                           const key = rawName.trim().toLowerCase();
+                           
+                           if (!contractorGroups.has(key)) {
+                             contractorGroups.set(key, { displayName: rawName, transporters: [] });
+                           }
+                           contractorGroups.get(key)!.transporters.push(t);
+                        });
+
+                        return Array.from(contractorGroups.values()).map(group => {
+                          const { displayName, transporters: groupTransporters } = group;
+                          
+                          // Sum up stats
+                          const stats = groupTransporters.reduce((acc, curr) => {
+                              const tStats = calculateTransporterEarnings(curr.id, dashboardTrips, dashboardPayments);
+                              return {
+                                  trips: acc.trips + tStats.totalTrips,
+                                  volume: acc.volume + tStats.totalVolume,
+                                  amount: acc.amount + tStats.totalAmount,
+                                  balance: acc.balance + tStats.balance
+                              };
+                          }, { trips: 0, volume: 0, amount: 0, balance: 0 });
+
+                          return (
+                            <tr key={displayName} className="border-t hover:bg-gray-50">
+                              <td className="px-4 py-3">
+                                <div className="font-medium">{displayName}</div>
+                              </td>
+                              <td className="px-4 py-3 text-right">{stats.trips.toLocaleString()}</td>
+                              <td className="px-4 py-3 text-right">{stats.volume.toLocaleString()}</td>
+                              <td className="px-4 py-3 text-right">{formatCurrency(stats.amount)}</td>
+                              <td className={`px-4 py-3 text-right font-medium ${stats.balance > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                                {formatCurrency(stats.balance)}
+                              </td>
+                            </tr>
+                          );
+                        });
+                      })()}
                     </tbody>
                     <tfoot className="bg-gray-100 font-bold border-t-2 border-gray-200">
                       <tr>
@@ -1620,9 +1644,15 @@ const DredgingDashboard: React.FC = () => {
                 </thead>
                 <tbody>
                   {payments.map(payment => {
-                    const entity = payment.entityType === 'dredger' 
-                      ? dredgers.find(d => d.id === payment.entityId)
-                      : transporters.find(t => t.id === payment.entityId);
+                    let entityName = '';
+                    if (payment.entityType === 'dredger') {
+                        const dr = dredgers.find(d => d.id === payment.entityId);
+                        entityName = dr?.name || '';
+                    } else {
+                        // For transporters, the entityId IS the contractor name
+                        entityName = payment.entityId;
+                    }
+
                     return (
                       <tr key={payment.id} className="border-t hover:bg-gray-50">
                         <td className="px-4 py-3">{formatDisplayDate(payment.date)}</td>
@@ -1631,7 +1661,7 @@ const DredgingDashboard: React.FC = () => {
                             {payment.entityType}
                           </span>
                         </td>
-                        <td className="px-4 py-3 font-medium">{entity?.name}</td>
+                        <td className="px-4 py-3 font-medium">{entityName}</td>
                         <td className="px-4 py-3 text-right font-bold text-green-600">{formatCurrency(payment.amount)}</td>
                         <td className="px-4 py-3">{payment.paymentMethod}</td>
                         <td className="px-4 py-3 font-mono text-sm">{payment.reference}</td>
@@ -1787,8 +1817,6 @@ const DredgingDashboard: React.FC = () => {
                   <thead className="bg-gray-50">
                     <tr>
                       <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Transporter</th>
-                      <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Contractor</th>
-                      <th className="px-4 py-3 text-right text-sm font-medium text-gray-600">Rate/CBM</th>
                       <th className="px-4 py-3 text-right text-sm font-medium text-gray-600">Total Trips</th>
                       <th className="px-4 py-3 text-right text-sm font-medium text-gray-600">Total Volume</th>
                       <th className="px-4 py-3 text-right text-sm font-medium text-gray-600">Total Amount</th>
@@ -1798,33 +1826,59 @@ const DredgingDashboard: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {transporters.map(transporter => {
-                      const earnings = calculateTransporterEarnings(transporter.id);
-                      return (
-                        <tr key={transporter.id} className="border-t hover:bg-gray-50">
-                          <td className="px-4 py-3">
-                            <div className="font-medium">{transporter.name}</div>
-                            <div className="text-sm text-gray-500">{transporter.code}</div>
-                          </td>
-                          <td className="px-4 py-3">{transporter.contractor}</td>
-                          <td className="px-4 py-3 text-right">{formatCurrency(transporter.ratePerCbm)}</td>
-                          <td className="px-4 py-3 text-right">{earnings.totalTrips.toLocaleString()}</td>
-                          <td className="px-4 py-3 text-right">{earnings.totalVolume.toLocaleString()} CBM</td>
-                          <td className="px-4 py-3 text-right font-medium">{formatCurrency(earnings.totalAmount)}</td>
-                          <td className="px-4 py-3 text-right text-green-600">{formatCurrency(earnings.totalPaid)}</td>
-                          <td className={`px-4 py-3 text-right font-bold ${earnings.balance > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                            {formatCurrency(earnings.balance)}
-                          </td>
-                          <td className="px-4 py-3 text-center">
-                            {earnings.balance > 0 ? (
-                              <span className="px-2 py-1 bg-red-100 text-red-800 rounded text-xs font-medium">Due</span>
-                            ) : (
-                              <span className="px-2 py-1 bg-green-100 text-green-800 rounded text-xs font-medium">Paid</span>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
+                    {(() => {
+                      const contractorGroups = new Map<string, { displayName: string, transporters: Transporter[] }>();
+                      transporters.forEach(t => {
+                         const rawName = t.contractor && t.contractor.trim() ? t.contractor : 'Unassigned';
+                         const key = rawName.trim().toLowerCase();
+                         if (!contractorGroups.has(key)) contractorGroups.set(key, { displayName: rawName, transporters: [] });
+                         contractorGroups.get(key)!.transporters.push(t);
+                      });
+
+                      return Array.from(contractorGroups.values()).map(group => {
+                        const { displayName, transporters: groupTransporters } = group;
+                        
+                        const opStats = groupTransporters.reduce((acc, curr) => {
+                            const tStats = calculateTransporterEarnings(curr.id); 
+                            return {
+                                trips: acc.trips + tStats.totalTrips,
+                                volume: acc.volume + tStats.totalVolume,
+                                amount: acc.amount + tStats.totalAmount
+                            };
+                        }, { trips: 0, volume: 0, amount: 0 });
+
+                        const contractorDirectPayments = payments.filter(p => 
+                           p.entityType === 'transporter' && p.entityId === displayName
+                        ).reduce((sum, p) => sum + p.amount, 0);
+
+                        const legacyPayments = payments.filter(p => 
+                           p.entityType === 'transporter' && groupTransporters.some(t => t.id === p.entityId)
+                        ).reduce((sum, p) => sum + p.amount, 0);
+
+                        const totalPaid = contractorDirectPayments + legacyPayments;
+                        const balance = opStats.amount - totalPaid;
+
+                        return (
+                          <tr key={displayName} className="border-t hover:bg-gray-50">
+                            <td className="px-4 py-3 font-medium">{displayName}</td>
+                            <td className="px-4 py-3 text-right">{opStats.trips.toLocaleString()}</td>
+                            <td className="px-4 py-3 text-right">{opStats.volume.toLocaleString()} CBM</td>
+                            <td className="px-4 py-3 text-right font-medium">{formatCurrency(opStats.amount)}</td>
+                            <td className="px-4 py-3 text-right text-green-600">{formatCurrency(totalPaid)}</td>
+                            <td className={`px-4 py-3 text-right font-bold ${balance > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                              {formatCurrency(balance)}
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              {balance > 0 ? (
+                                <span className="px-2 py-1 bg-red-100 text-red-800 rounded text-xs font-medium">Due</span>
+                              ) : (
+                                <span className="px-2 py-1 bg-green-100 text-green-800 rounded text-xs font-medium">Paid</span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      });
+                    })()}
                   </tbody>
                 </table>
               </div>
@@ -1861,26 +1915,53 @@ const DredgingDashboard: React.FC = () => {
                   </div>
                 </div>
                 <div>
-                  <h4 className="font-semibold mb-3">Transporter Payments</h4>
+                  <h4 className="font-semibold mb-3">Transporter Payments (By Contractor)</h4>
                   <div className="space-y-2">
-                    {transporters.map(transporter => {
-                      const earnings = calculateTransporterEarnings(transporter.id);
-                      return (
-                        <div key={transporter.id} className="flex justify-between items-center p-3 bg-gray-50 rounded">
-                          <div>
-                            <div className="font-medium">{transporter.name}</div>
-                            <div className="text-sm text-gray-500">{transporter.code}</div>
-                          </div>
-                          <div className="text-right">
-                            <div className="text-sm text-gray-600">Due: {formatCurrency(earnings.totalAmount)}</div>
-                            <div className="text-sm text-green-600">Paid: {formatCurrency(earnings.totalPaid)}</div>
-                            <div className={`font-bold ${earnings.balance > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                              Balance: {formatCurrency(earnings.balance)}
+                    {(() => {
+                      const contractorGroups = new Map<string, { displayName: string, transporters: Transporter[] }>();
+                      transporters.forEach(t => {
+                         const rawName = t.contractor && t.contractor.trim() ? t.contractor : 'Unassigned';
+                         const key = rawName.trim().toLowerCase();
+                         if (!contractorGroups.has(key)) contractorGroups.set(key, { displayName: rawName, transporters: [] });
+                         contractorGroups.get(key)!.transporters.push(t);
+                      });
+
+                      return Array.from(contractorGroups.values()).map(group => {
+                        const { displayName, transporters: groupTransporters } = group;
+                        
+                        const opStats = groupTransporters.reduce((acc, curr) => {
+                            const tStats = calculateTransporterEarnings(curr.id); 
+                            return { amount: acc.amount + tStats.totalAmount };
+                        }, { amount: 0 });
+
+                        const contractorDirectPayments = payments.filter(p => 
+                           p.entityType === 'transporter' && p.entityId === displayName
+                        ).reduce((sum, p) => sum + p.amount, 0);
+
+                        const legacyPayments = payments.filter(p => 
+                           p.entityType === 'transporter' && groupTransporters.some(t => t.id === p.entityId)
+                        ).reduce((sum, p) => sum + p.amount, 0);
+
+                        const totalPaid = contractorDirectPayments + legacyPayments;
+                        const balance = opStats.amount - totalPaid;
+
+                        return (
+                          <div key={displayName} className="flex justify-between items-center p-3 bg-gray-50 rounded">
+                            <div>
+                              <div className="font-medium">{displayName}</div>
+                              <div className="text-xs text-gray-500">{groupTransporters.length} Transporter(s)</div>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-sm text-gray-600">Due: {formatCurrency(opStats.amount)}</div>
+                              <div className="text-sm text-green-600">Paid: {formatCurrency(totalPaid)}</div>
+                              <div className={`font-bold ${balance > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                                Balance: {formatCurrency(balance)}
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      );
-                    })}
+                        );
+                      });
+                    })()}
                   </div>
                 </div>
               </div>
@@ -2204,7 +2285,11 @@ const DredgingDashboard: React.FC = () => {
                   <option value="">Select Entity</option>
                   {paymentForm.entityType === 'dredger'
                     ? dredgers.map(d => <option key={d.id} value={d.id}>{d.name}</option>)
-                    : transporters.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                    : Array.from(new Set(
+                        transporters.map(t => t.contractor ? t.contractor.trim() : '').filter(c => c !== '')
+                      )).sort().map(contractor => (
+                        <option key={contractor} value={contractor}>{contractor}</option>
+                      ))}
                 </select>
               </div>
               <div>
