@@ -156,13 +156,32 @@ const DredgingDashboard: React.FC = () => {
       // 3. Load Trips
       const tripRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${GOOGLE_SHEETS_CONFIG.spreadsheetId}/values/Trips?key=${GOOGLE_SHEETS_CONFIG.apiKey}`);
       const tripData = await tripRes.json();
-      setTrips((tripData.values || []).slice(1).map((row: any[], i: number) => ({
-        id: `trip-${i}`, date: row[0], dredgerId: loadedDredgers.find((d: Dredger) => d.code === row[1])?.id || '',
-        transporterId: row[2], plateNumber: row[3], trips: parseInt(row[4]) || 0,
-        totalVolume: (parseInt(row[4]) || 0) * (parseFloat(row[5]) || 0),
-        dredgerRate: parseFloat(row[5]) || 0, transporterRate: parseFloat(row[6]) || 0, dumpingLocation: row[7],
-        notes: row[8] || ''
-      })));
+      
+      setTrips((tripData.values || []).slice(1).map((row: any[], i: number) => {
+        // Find truck capacity
+        const transporterCode = row[2];
+        const plateNumber = row[3];
+        const transporter = transporterMap.get(transporterCode);
+        const truck = transporter?.trucks.find((t: any) => t.plateNumber === plateNumber);
+        const capacityCbm = truck?.capacityCbm || 0;
+        const tripsCount = parseInt(row[4]) || 0;
+
+        return {
+          id: `trip-${i}`, 
+          date: row[0], 
+          dredgerId: loadedDredgers.find((d: Dredger) => d.code === row[1])?.id || '',
+          transporterId: transporterCode, 
+          truckId: truck?.id || '', // Helpful for edit modal
+          plateNumber: plateNumber, 
+          trips: tripsCount,
+          capacityCbm: capacityCbm, // Now correctly populated
+          totalVolume: tripsCount * capacityCbm, // Correct calculation: Trips * Capacity
+          dredgerRate: parseFloat(row[5]) || 0, 
+          transporterRate: parseFloat(row[6]) || 0, 
+          dumpingLocation: row[7],
+          notes: row[8] || ''
+        };
+      }));
   
       // 4. Load Payments
       const payRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${GOOGLE_SHEETS_CONFIG.spreadsheetId}/values/Payments?key=${GOOGLE_SHEETS_CONFIG.apiKey}`);
