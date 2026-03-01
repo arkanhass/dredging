@@ -148,6 +148,7 @@ const DredgingDashboard: React.FC = () => {
   // Search and filter
   const [searchTerm, setSearchTerm] = useState('');
   const [dateFilter, setDateFilter] = useState({ start: '', end: '' });
+  const [dashboardDateFilter, setDashboardDateFilter] = useState({ start: '', end: '' });
   
   // Form states
   const [dredgerForm, setDredgerForm] = useState<Partial<Dredger>>({});
@@ -208,6 +209,7 @@ const DredgingDashboard: React.FC = () => {
               truckName: truckName,
               plateNumber: plateNumber,
               capacityCbm: isNaN(capacity) ? 0 : capacity,
+              status: 'active',
             });
           }
         }
@@ -257,17 +259,32 @@ const DredgingDashboard: React.FC = () => {
     } catch (err) { console.error(err); }
   };
 
+  // Filtered data for Dashboard
+  const dashboardTrips = trips.filter(t => {
+    const isoDate = toSortableISO(t.date);
+    const afterStart = !dashboardDateFilter.start || isoDate >= toSortableISO(dashboardDateFilter.start);
+    const beforeEnd = !dashboardDateFilter.end || isoDate <= toSortableISO(dashboardDateFilter.end);
+    return afterStart && beforeEnd;
+  });
+
+  const dashboardPayments = payments.filter(p => {
+    const isoDate = toSortableISO(p.date);
+    const afterStart = !dashboardDateFilter.start || isoDate >= toSortableISO(dashboardDateFilter.start);
+    const beforeEnd = !dashboardDateFilter.end || isoDate <= toSortableISO(dashboardDateFilter.end);
+    return afterStart && beforeEnd;
+  });
+
   // Calculations
-  const calculateDredgerEarnings = (dredgerId: string) => {
-    const dredgerTrips = trips.filter(t => t.dredgerId === dredgerId);
+  const calculateDredgerEarnings = (dredgerId: string, tripsData = trips, paymentsData = payments) => {
+    const dredgerTrips = tripsData.filter(t => t.dredgerId === dredgerId);
     const totalVolume = dredgerTrips.reduce((sum, t) => sum + t.totalVolume, 0);
     const totalAmount = dredgerTrips.reduce((sum, t) => sum + (t.totalVolume * (t.dredgerRate || 0)), 0);
-    const totalPaid = payments.filter(p => p.entityType === 'dredger' && p.entityId === dredgerId).reduce((sum, p) => sum + p.amount, 0);
+    const totalPaid = paymentsData.filter(p => p.entityType === 'dredger' && p.entityId === dredgerId).reduce((sum, p) => sum + p.amount, 0);
     return { totalVolume, totalAmount, totalPaid, balance: totalAmount - totalPaid };
   };
 
-  const calculateTransporterEarnings = (transporterId: string) => {
-    const transporterTrips = trips.filter(t => t.transporterId === transporterId);
+  const calculateTransporterEarnings = (transporterId: string, tripsData = trips, paymentsData = payments) => {
+    const transporterTrips = tripsData.filter(t => t.transporterId === transporterId);
     const totalTrips = transporterTrips.reduce((sum, t) => sum + t.trips, 0);
     const totalVolume = transporterTrips.reduce((sum, t) => sum + t.totalVolume, 0);
     
@@ -276,16 +293,16 @@ const DredgingDashboard: React.FC = () => {
        return sum + (t.totalVolume * (t.transporterRate || 0));
     }, 0);
     
-    const totalPaid = payments.filter(p => p.entityType === 'transporter' && p.entityId === transporterId).reduce((sum, p) => sum + p.amount, 0);
+    const totalPaid = paymentsData.filter(p => p.entityType === 'transporter' && p.entityId === transporterId).reduce((sum, p) => sum + p.amount, 0);
     return { totalTrips, totalVolume, totalAmount, totalPaid, balance: totalAmount - totalPaid };
   };
 
   const overallStats = {
-    totalVolume: trips.reduce((sum, t) => sum + t.totalVolume, 0),
-    totalTrips: trips.reduce((sum, t) => sum + t.trips, 0),
-    totalDredgerCost: trips.reduce((sum, t) => sum + (t.totalVolume * (t.dredgerRate || 0)), 0),
-    totalTransporterCost: trips.reduce((sum, t) => sum + (t.totalVolume * (t.transporterRate || 0)), 0),
-    totalPaid: payments.reduce((sum, p) => sum + p.amount, 0),
+    totalVolume: dashboardTrips.reduce((sum, t) => sum + t.totalVolume, 0),
+    totalTrips: dashboardTrips.reduce((sum, t) => sum + t.trips, 0),
+    totalDredgerCost: dashboardTrips.reduce((sum, t) => sum + (t.totalVolume * (t.dredgerRate || 0)), 0),
+    totalTransporterCost: dashboardTrips.reduce((sum, t) => sum + (t.totalVolume * (t.transporterRate || 0)), 0),
+    totalPaid: dashboardPayments.reduce((sum, p) => sum + p.amount, 0),
   };
 
   // Google Apps Script URL
@@ -877,6 +894,35 @@ const DredgingDashboard: React.FC = () => {
         {/* Dashboard Tab */}
         {activeTab === 'dashboard' && (
           <div className="space-y-6">
+            {/* Dashboard Date Filter */}
+            <div className="bg-white p-4 rounded-lg shadow-sm flex flex-wrap items-center justify-between gap-4">
+               <h2 className="text-lg font-bold text-gray-700">Project Overview</h2>
+               <div className="flex items-center space-x-2">
+                  <span className="text-sm text-gray-600 font-medium">Filter Range:</span>
+                  <input
+                    type="date"
+                    value={dashboardDateFilter.start}
+                    onChange={(e) => setDashboardDateFilter({ ...dashboardDateFilter, start: e.target.value })}
+                    className="px-3 py-2 border rounded-lg text-sm"
+                  />
+                  <span className="text-gray-400">-</span>
+                  <input
+                    type="date"
+                    value={dashboardDateFilter.end}
+                    onChange={(e) => setDashboardDateFilter({ ...dashboardDateFilter, end: e.target.value })}
+                    className="px-3 py-2 border rounded-lg text-sm"
+                  />
+                  {(dashboardDateFilter.start || dashboardDateFilter.end) && (
+                    <button 
+                      onClick={() => setDashboardDateFilter({ start: '', end: '' })}
+                      className="text-sm text-red-600 hover:text-red-800 ml-2"
+                    >
+                      Clear
+                    </button>
+                  )}
+               </div>
+            </div>
+
             {/* Stats Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
               <div className="bg-white rounded-lg shadow p-4">
@@ -957,7 +1003,7 @@ const DredgingDashboard: React.FC = () => {
                     </thead>
                     <tbody>
                       {dredgers.map(dredger => {
-                        const earnings = calculateDredgerEarnings(dredger.id);
+                        const earnings = calculateDredgerEarnings(dredger.id, dashboardTrips, dashboardPayments);
                         return (
                           <tr key={dredger.id} className="border-t hover:bg-gray-50">
                             <td className="px-4 py-3">
@@ -997,7 +1043,7 @@ const DredgingDashboard: React.FC = () => {
                     </thead>
                     <tbody>
                       {transporters.map(transporter => {
-                        const earnings = calculateTransporterEarnings(transporter.id);
+                        const earnings = calculateTransporterEarnings(transporter.id, dashboardTrips, dashboardPayments);
                         return (
                           <tr key={transporter.id} className="border-t hover:bg-gray-50">
                             <td className="px-4 py-3">
@@ -1039,7 +1085,7 @@ const DredgingDashboard: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {trips.slice(-10).reverse().map(trip => {
+                    {dashboardTrips.slice(-10).reverse().map(trip => {
                       const dredger = dredgers.find(d => d.id === trip.dredgerId);
                       const transporter = transporters.find(t => t.id === trip.transporterId);
                       return (
