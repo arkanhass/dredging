@@ -1035,17 +1035,17 @@ const DredgingDashboard: React.FC = () => {
                 </div>
               </div>
 
-              {/* Transporter Summary */}
+              {/* Transporter Summary (Grouped by Contractor) */}
               <div className="bg-white rounded-lg shadow">
                 <div className="p-4 border-b flex justify-between items-center">
-                  <h3 className="font-bold text-lg">Transporter Summary</h3>
-                  <button onClick={() => setActiveTab('transporters')} className="text-blue-600 hover:underline text-sm">View All</button>
+                  <h3 className="font-bold text-lg">Contractor Summary</h3>
+                  <button onClick={() => setActiveTab('transporters')} className="text-blue-600 hover:underline text-sm">View All Transporters</button>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full">
                     <thead className="bg-gray-50">
                       <tr>
-                        <th className="px-4 py-2 text-left text-sm font-medium text-gray-600">Transporter</th>
+                        <th className="px-4 py-2 text-left text-sm font-medium text-gray-600">Contractor</th>
                         <th className="px-4 py-2 text-right text-sm font-medium text-gray-600">Trips</th>
                         <th className="px-4 py-2 text-right text-sm font-medium text-gray-600">Volume (CBM)</th>
                         <th className="px-4 py-2 text-right text-sm font-medium text-gray-600">Amount</th>
@@ -1053,19 +1053,32 @@ const DredgingDashboard: React.FC = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {transporters.map(transporter => {
-                        const earnings = calculateTransporterEarnings(transporter.id, dashboardTrips, dashboardPayments);
+                      {Array.from(new Set(transporters.map(t => t.contractor || 'Unassigned'))).map(contractorName => {
+                        // Find all transporters for this contractor
+                        const contractorTransporters = transporters.filter(t => (t.contractor || 'Unassigned') === contractorName);
+                        
+                        // Sum up stats
+                        const stats = contractorTransporters.reduce((acc, curr) => {
+                            const tStats = calculateTransporterEarnings(curr.id, dashboardTrips, dashboardPayments);
+                            return {
+                                trips: acc.trips + tStats.totalTrips,
+                                volume: acc.volume + tStats.totalVolume,
+                                amount: acc.amount + tStats.totalAmount,
+                                balance: acc.balance + tStats.balance
+                            };
+                        }, { trips: 0, volume: 0, amount: 0, balance: 0 });
+
                         return (
-                          <tr key={transporter.id} className="border-t hover:bg-gray-50">
+                          <tr key={contractorName} className="border-t hover:bg-gray-50">
                             <td className="px-4 py-3">
-                              <div className="font-medium">{transporter.name}</div>
-                              <div className="text-sm text-gray-500">{transporter.code}</div>
+                              <div className="font-medium">{contractorName}</div>
+                              <div className="text-xs text-gray-500">{contractorTransporters.length} Transporter(s)</div>
                             </td>
-                            <td className="px-4 py-3 text-right">{earnings.totalTrips.toLocaleString()}</td>
-                            <td className="px-4 py-3 text-right">{earnings.totalVolume.toLocaleString()}</td>
-                            <td className="px-4 py-3 text-right">{formatCurrency(earnings.totalAmount)}</td>
-                            <td className={`px-4 py-3 text-right font-medium ${earnings.balance > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                              {formatCurrency(earnings.balance)}
+                            <td className="px-4 py-3 text-right">{stats.trips.toLocaleString()}</td>
+                            <td className="px-4 py-3 text-right">{stats.volume.toLocaleString()}</td>
+                            <td className="px-4 py-3 text-right">{formatCurrency(stats.amount)}</td>
+                            <td className={`px-4 py-3 text-right font-medium ${stats.balance > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                              {formatCurrency(stats.balance)}
                             </td>
                           </tr>
                         );
