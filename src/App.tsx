@@ -989,7 +989,9 @@ const DredgingDashboard: React.FC = () => {
                           <td className="px-4 py-3">{transporter?.name}</td>
                           <td className="px-4 py-3 font-mono text-sm">{trip.plateNumber}</td>
                           <td className="px-4 py-3 text-right">{trip.trips}</td>
-                          <td className="px-4 py-3 text-right">{trip.totalVolume} CBM</td>
+                          <td className="px-4 py-3 text-right">
+  {trip.totalVolume != null ? `${trip.totalVolume.toFixed(2)} CBM` : ''}
+</td>
                           <td className="px-4 py-3">{trip.dumpingLocation}</td>
                         </tr>
                       );
@@ -1368,40 +1370,57 @@ const DredgingDashboard: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredTrips.map(trip => {
-                    const dredger = dredgers.find(d => d.id === trip.dredgerId);
-                    const transporter = transporters.find(t => t.id === trip.transporterId);
-                    const truck = transporter?.trucks.find(tr => tr.id === trip.truckId || tr.plateNumber === trip.plateNumber);
-                    const truckDisplay = truck?.id ? `(${truck.plateNumber} ${truck.capacityCbm} CBM)` : trip.plateNumber;
-                    return (
-                      <tr key={trip.id} className="border-t hover:bg-gray-50">
-                        <td className="px-4 py-3">{trip.date}</td>
-                        <td className="px-4 py-3">{dredger?.name}</td>
-                        <td className="px-4 py-3">{transporter?.name}</td>
-                        <td className="px-4 py-3 font-mono text-sm">{truckDisplay}</td>
-                        <td className="px-4 py-3 text-right">{trip.trips}</td>
-                        <td className="px-4 py-3 text-right">{trip.capacityCbm} CBM</td>
-                        <td className="px-4 py-3 text-right font-medium">{trip.totalVolume} CBM</td>
-                        <td className="px-4 py-3">{trip.dumpingLocation}</td>
-                        <td className="px-4 py-3 text-right">
-                          <div className="flex justify-end space-x-2">
-                            <button
-                              onClick={() => { setEditingItem(trip); setTripForm(trip); setShowTripModal(true); }}
-                              className="p-1 text-blue-600 hover:bg-blue-50 rounded"
-                            >
-                              <Edit className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => deleteItem('trip', trip.id)}
-                              className="p-1 text-red-600 hover:bg-red-50 rounded"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
+                 {filteredTrips.map(trip => {
+  const dredger = dredgers.find(d => d.id === trip.dredgerId);
+  const transporter = transporters.find(t => t.id === trip.transporterId);
+  const truck = transporter?.trucks.find(
+    tr => tr.id === trip.truckId || tr.plateNumber === trip.plateNumber
+  );
+
+  // Truck text: (PlateNumber - TruckName) or just (PlateNumber)
+  const truckDisplay = truck
+    ? `(${truck.plateNumber}${(truck as any).truckName ? ' - ' + (truck as any).truckName : ''})`
+    : trip.plateNumber;
+
+  // Capacity in CBM: from trip if stored, otherwise from truck
+  const capacityCbm = trip.capacityCbm ?? truck?.capacityCbm ?? 0;
+
+  // Total volume (Trips × Capacity), with 2 decimals
+  const totalVolume = trip.totalVolume ?? capacityCbm * (trip.trips ?? 0);
+
+  return (
+    <tr key={trip.id} className="border-t hover:bg-gray-50">
+      <td className="px-4 py-3">{trip.date}</td>
+      <td className="px-4 py-3">{dredger?.name}</td>
+      <td className="px-4 py-3">{transporter?.name}</td>
+      <td className="px-4 py-3 font-mono text-sm">{truckDisplay}</td>
+      <td className="px-4 py-3 text-right">{trip.trips}</td>
+      <td className="px-4 py-3 text-right">
+        {capacityCbm ? `${capacityCbm.toFixed(2)} CBM` : ''}
+      </td>
+      <td className="px-4 py-3 text-right font-medium">
+        {totalVolume ? `${totalVolume.toFixed(2)} CBM` : ''}
+      </td>
+      <td className="px-4 py-3">{trip.dumpingLocation}</td>
+      <td className="px-4 py-3 text-right">
+        <div className="flex justify-end space-x-2">
+          <button
+            onClick={() => { setEditingItem(trip); setTripForm(trip); setShowTripModal(true); }}
+            className="p-1 text-blue-600 hover:bg-blue-50 rounded"
+          >
+            <Edit className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => deleteItem('trip', trip.id)}
+            className="p-1 text-red-600 hover:bg-red-50 rounded"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+        </div>
+      </td>
+    </tr>
+  );
+})}
                 </tbody>
               </table>
             </div>
