@@ -583,8 +583,76 @@ const DredgingDashboard: React.FC = () => {
                CapacityCbm: row.CapacityCbm || row.capacityCbm,
                TruckName: row.TruckName || row['Truck Name'] || row.truckName
              };
-           } 
-           // Add other types as needed...
+           } else if (type === 'trips') {
+             action = 'saveTrip';
+             
+             // Helper to parse DD/MM/YYYY to YYYY-MM-DD
+             const parseDate = (d: any) => {
+               if (!d) return new Date().toISOString().split('T')[0];
+               if (typeof d === 'string') {
+                 // Check for DD/MM/YYYY
+                 if (d.match(/^\d{1,2}\/\d{1,2}\/\d{4}$/)) {
+                   const [day, month, year] = d.split('/');
+                   return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+                 }
+                 return d; // Assume it's already YYYY-MM-DD or standard
+               }
+               return d; // Fallback
+             };
+
+             const tripDate = parseDate(row.Date || row.date);
+             const dredgerCode = row.DredgerCode || row.dredgerCode;
+             const transporterCode = row.TransporterCode || row.transporterCode;
+             const plateNumber = row.PlateNumber || row.plateNumber;
+             const tripsCount = parseInt(row.Trips || row.trips || 0);
+             const drRate = parseFloat(row.DredgerRate || row.dredgerRate || 0);
+             const trRate = parseFloat(row.TransporterRate || row.transporterRate || 0);
+             
+             // Try to look up truck capacity for calculations
+             // We need to find the truck in our loaded state to get capacity
+             // But we can't easily access 'transporters' state inside this callback reliably if it's stale,
+             // however 'transporters' is in scope.
+             let capacity = 0;
+             const transporter = transporters.find(t => t.code === transporterCode);
+             if (transporter) {
+               const truck = transporter.trucks.find(t => t.plateNumber === plateNumber);
+               if (truck) capacity = truck.capacityCbm;
+             }
+
+             payload = {
+               Date: tripDate,
+               DredgerCode: dredgerCode,
+               TransporterCode: transporterCode,
+               PlateNumber: plateNumber,
+               Trips: tripsCount,
+               DredgerRate: drRate,
+               TransporterRate: trRate,
+               DumpingLocation: row.DumpingLocation || row.dumpingLocation || '',
+               Notes: row.Notes || row.notes || '',
+               DredgerAmount: tripsCount * capacity * drRate, // Best effort calculation
+               TransporterAmount: tripsCount * capacity * trRate
+             };
+           } else if (type === 'payments') {
+             action = 'savePayment';
+             const parseDate = (d: any) => {
+               if (!d) return new Date().toISOString().split('T')[0];
+               if (typeof d === 'string' && d.match(/^\d{1,2}\/\d{1,2}\/\d{4}$/)) {
+                 const [day, month, year] = d.split('/');
+                 return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+               }
+               return d;
+             };
+             
+             payload = {
+               Date: parseDate(row.Date || row.date),
+               EntityType: (row.EntityType || row.entityType || 'dredger').toLowerCase(),
+               EntityCode: row.EntityId || row.entityId || row.EntityCode || row.entityCode,
+               Amount: parseFloat(row.Amount || row.amount || 0),
+               PaymentMethod: row.PaymentMethod || row.paymentMethod || 'Bank Transfer',
+               Reference: row.Reference || row.reference || `PAY-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+               Notes: row.Notes || row.notes || ''
+             };
+           }
            
            if (action) {
              // Fire and forget with no-cors
