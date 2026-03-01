@@ -1020,6 +1020,17 @@ const DredgingDashboard: React.FC = () => {
                         );
                       })}
                     </tbody>
+                    <tfoot className="bg-gray-100 font-bold border-t-2 border-gray-200">
+                      <tr>
+                        <td className="px-4 py-3 text-gray-800">Total Volume</td>
+                        <td className="px-4 py-3 text-right text-blue-800">
+                          {dredgers.reduce((sum, d) => sum + calculateDredgerEarnings(d.id, dashboardTrips, dashboardPayments).totalVolume, 0).toLocaleString()}
+                        </td>
+                        <td className="px-4 py-3 text-right"></td>
+                        <td className="px-4 py-3 text-right"></td>
+                        <td className="px-4 py-3 text-right"></td>
+                      </tr>
+                    </tfoot>
                   </table>
                 </div>
               </div>
@@ -1060,6 +1071,17 @@ const DredgingDashboard: React.FC = () => {
                         );
                       })}
                     </tbody>
+                    <tfoot className="bg-gray-100 font-bold border-t-2 border-gray-200">
+                      <tr>
+                        <td className="px-4 py-3 text-gray-800">Total Volume</td>
+                        <td className="px-4 py-3 text-right"></td>
+                        <td className="px-4 py-3 text-right text-blue-800">
+                          {transporters.reduce((sum, t) => sum + calculateTransporterEarnings(t.id, dashboardTrips, dashboardPayments).totalVolume, 0).toLocaleString()}
+                        </td>
+                        <td className="px-4 py-3 text-right"></td>
+                        <td className="px-4 py-3 text-right"></td>
+                      </tr>
+                    </tfoot>
                   </table>
                 </div>
               </div>
