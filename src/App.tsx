@@ -208,10 +208,11 @@ const DredgingDashboard: React.FC = () => {
    * ROBUST DATA SAVING FUNCTION
    * 
    * This function uses 'no-cors' mode to bypass CORS preflight checks.
-   * It handles the "Failed to fetch" error by treating it as a success,
-   * because we know the data is reaching Google Sheets despite the browser complaining about the response.
+   * It handles the "Failed to fetch" error by treating it as a success.
+   * 
+   * Added 'silent' mode for optimistic updates.
    */
-  const submitToAppsScript = async (action: string, data: any, onSuccess: () => void) => {
+  const submitToAppsScript = async (action: string, data: any, onSuccess: () => void, silent = false) => {
     const payload = { action, data };
     
     try {
@@ -225,33 +226,47 @@ const DredgingDashboard: React.FC = () => {
         body: JSON.stringify(payload),
       });
 
-      // 2. If we get here, the request was sent. 
-      // With 'no-cors', we can't read the response, but we assume it worked.
-      console.log('Request sent successfully (opaque response)');
+      console.log(`Request ${action} sent successfully (opaque response)`);
       
-      // 3. Wait a moment for Sheet to update, then reload
-      setTimeout(async () => {
-        await loadDataFromSheets();
+      if (!silent) {
+        // Legacy mode: wait and reload explicitly
+        setTimeout(async () => {
+          await loadDataFromSheets();
+          onSuccess();
+          alert('Action completed! Data reloading...');
+        }, 2500);
+      } else {
+        // Silent/Optimistic mode: success callback immediately (or already called), background reload later
         onSuccess();
-        alert('Data saved successfully!');
-      }, 1500);
+        // Reload silently in background to eventually sync consistency
+        setTimeout(() => loadDataFromSheets(), 3000);
+      }
 
     } catch (error) {
-      // 4. Handle "Failed to fetch" specifically
-      // This error often happens even when the request SUCCEEDED on the server
       console.warn("Fetch error (likely CORS false positive):", error);
-      
-      // We assume success here because you confirmed data IS saving
-      setTimeout(async () => {
-        await loadDataFromSheets();
+      if (!silent) {
+        setTimeout(async () => {
+          await loadDataFromSheets();
+          onSuccess();
+          alert('Action completed! Data reloading... (UI updated)');
+        }, 2500);
+      } else {
         onSuccess();
-        alert('Data saved successfully! (UI updated)');
-      }, 1500);
+        setTimeout(() => loadDataFromSheets(), 3000);
+      }
     }
   };
 
   // CRUD Operations
   const saveDredger = async () => {
+    // Optimistic Update
+    if (editingItem) {
+      setDredgers(prev => prev.map(d => d.id === editingItem.id ? { ...d, ...dredgerForm } as Dredger : d));
+    } else {
+      const newDredger = { ...dredgerForm, id: `temp-${Date.now()}` } as Dredger;
+      setDredgers(prev => [...prev, newDredger]);
+    }
+
     const dredgerData = {
       Code: dredgerForm.code,
       Name: dredgerForm.name,
@@ -260,14 +275,23 @@ const DredgingDashboard: React.FC = () => {
       Contractor: dredgerForm.contractor || '',
       ContractNumber: dredgerForm.contractNumber || '',
     };
-    submitToAppsScript('saveDredger', dredgerData, () => {
-      setShowDredgerModal(false);
-      setEditingItem(null);
-      setDredgerForm({});
-    });
+
+    setShowDredgerModal(false);
+    setEditingItem(null);
+    setDredgerForm({});
+
+    submitToAppsScript('saveDredger', dredgerData, () => {}, true);
   };
 
   const saveTransporter = async () => {
+    // Optimistic Update
+    if (editingItem) {
+      setTransporters(prev => prev.map(t => t.id === editingItem.id ? { ...t, ...transporterForm } as Transporter : t));
+    } else {
+      const newTransporter = { ...transporterForm, id: `temp-${Date.now()}`, trucks: [] } as Transporter;
+      setTransporters(prev => [...prev, newTransporter]);
+    }
+
     const transporterData = {
       Code: transporterForm.code,
       Name: transporterForm.name,
@@ -278,11 +302,12 @@ const DredgingDashboard: React.FC = () => {
       PlateNumber: '', 
       CapacityCbm: 0,
     };
-    submitToAppsScript('saveTransporter', transporterData, () => {
-      setShowTransporterModal(false);
-      setEditingItem(null);
-      setTransporterForm({});
-    });
+
+    setShowTransporterModal(false);
+    setEditingItem(null);
+    setTransporterForm({});
+
+    submitToAppsScript('saveTransporter', transporterData, () => {}, true);
   };
 
   const saveTrip = async () => {
@@ -291,6 +316,29 @@ const DredgingDashboard: React.FC = () => {
     const dredger = dredgers.find(d => d.id === tripForm.dredgerId);
     const transporter = transporters.find(t => t.id === tripForm.transporterId);
     
+    // Optimistic Update
+    const newTrip: Trip = {
+      id: editingItem ? editingItem.id : `temp-${Date.now()}`,
+      date: tripForm.date || '',
+      dredgerId: tripForm.dredgerId || '',
+      transporterId: tripForm.transporterId || '',
+      truckId: tripForm.truckId || '',
+      plateNumber: truck?.plateNumber || '',
+      trips: tripForm.trips || 0,
+      capacityCbm: truck?.capacityCbm || 0,
+      totalVolume: (tripForm.trips || 0) * (truck?.capacityCbm || 0),
+      dredgerRate: dredger?.ratePerCbm || 0,
+      transporterRate: transporter?.ratePerCbm || 0,
+      dumpingLocation: tripForm.dumpingLocation || '',
+      notes: tripForm.notes || ''
+    };
+
+    if (editingItem) {
+      setTrips(prev => prev.map(t => t.id === editingItem.id ? newTrip : t));
+    } else {
+      setTrips(prev => [...prev, newTrip]);
+    }
+
     const tripData = {
       Date: tripForm.date,
       DredgerCode: dredger?.code || '',
@@ -305,11 +353,11 @@ const DredgingDashboard: React.FC = () => {
       TransporterAmount: (tripForm.trips || 0) * (truck?.capacityCbm || 0) * (transporter?.ratePerCbm || 0),
     };
 
-    submitToAppsScript('saveTrip', tripData, () => {
-      setShowTripModal(false);
-      setEditingItem(null);
-      setTripForm({});
-    });
+    setShowTripModal(false);
+    setEditingItem(null);
+    setTripForm({});
+
+    submitToAppsScript('saveTrip', tripData, () => {}, true);
   };
 
   const savePayment = async () => {
@@ -317,6 +365,24 @@ const DredgingDashboard: React.FC = () => {
       ? dredgers.find(d => d.id === paymentForm.entityId)
       : transporters.find(t => t.id === paymentForm.entityId);
     
+    // Optimistic Update
+    const newPayment: Payment = {
+      id: editingItem ? editingItem.id : `temp-${Date.now()}`,
+      date: paymentForm.date || '',
+      entityType: paymentForm.entityType || 'dredger',
+      entityId: paymentForm.entityId || '',
+      amount: paymentForm.amount || 0,
+      paymentMethod: paymentForm.paymentMethod || 'Bank Transfer',
+      reference: paymentForm.reference || '',
+      notes: paymentForm.notes || ''
+    };
+
+    if (editingItem) {
+      setPayments(prev => prev.map(p => p.id === editingItem.id ? newPayment : p));
+    } else {
+      setPayments(prev => [...prev, newPayment]);
+    }
+
     const paymentData = {
       Date: paymentForm.date,
       EntityType: paymentForm.entityType,
@@ -327,11 +393,11 @@ const DredgingDashboard: React.FC = () => {
       Notes: paymentForm.notes || '',
     };
 
-    submitToAppsScript('savePayment', paymentData, () => {
-      setShowPaymentModal(false);
-      setEditingItem(null);
-      setPaymentForm({});
-    });
+    setShowPaymentModal(false);
+    setEditingItem(null);
+    setPaymentForm({});
+
+    submitToAppsScript('savePayment', paymentData, () => {}, true);
   };
 
   const deleteItem = async (type: 'dredger' | 'transporter' | 'trip' | 'payment', id: string) => {
@@ -340,29 +406,34 @@ const DredgingDashboard: React.FC = () => {
     let actionData: any = {};
     let actionName = '';
 
+    // Optimistic Update
     if (type === 'dredger') {
+      setDredgers(prev => prev.filter(d => d.id !== id));
       actionName = 'deleteDredger';
       actionData = { code: dredgers.find(d => d.id === id)?.code };
     } else if (type === 'transporter') {
+      setTransporters(prev => prev.filter(t => t.id !== id));
       actionName = 'deleteTransporter';
       actionData = { code: transporters.find(t => t.id === id)?.code };
     } else if (type === 'trip') {
-      actionName = 'deleteTrip';
       const trip = trips.find(t => t.id === id);
+      setTrips(prev => prev.filter(t => t.id !== id));
+      actionName = 'deleteTrip';
       actionData = { 
         date: trip?.date,
         dredgerCode: dredgers.find(d => d.id === trip?.dredgerId)?.code
       };
     } else if (type === 'payment') {
-      actionName = 'deletePayment';
       const payment = payments.find(p => p.id === id);
+      setPayments(prev => prev.filter(p => p.id !== id));
+      actionName = 'deletePayment';
       actionData = { 
         date: payment?.date,
         reference: payment?.reference
       };
     }
 
-    submitToAppsScript(actionName, actionData, () => {});
+    submitToAppsScript(actionName, actionData, () => {}, true);
   };
 
   const addTruck = async (transporterId: string) => {
@@ -377,6 +448,23 @@ const DredgingDashboard: React.FC = () => {
     if (!capacityStr) return;
     const capacity = parseFloat(capacityStr);
     
+    // Optimistic Update
+    const newTruck: TruckRecord = {
+      id: `temp-${Date.now()}`,
+      truckName,
+      plateNumber,
+      capacityCbm: capacity,
+      transporterId: transporter.id,
+      status: 'active'
+    };
+
+    setTransporters(prev => prev.map(t => {
+      if (t.id === transporterId) {
+        return { ...t, trucks: [...t.trucks, newTruck] };
+      }
+      return t;
+    }));
+
     const truckData = {
       Code: transporter.code,
       Name: transporter.name,
@@ -389,7 +477,7 @@ const DredgingDashboard: React.FC = () => {
       TruckName: truckName,
     };
 
-    submitToAppsScript('saveTransporter', truckData, () => {});
+    submitToAppsScript('saveTransporter', truckData, () => {}, true);
   };
 
   const deleteTruck = async (transporterId: string, truckId: string) => {
@@ -400,15 +488,21 @@ const DredgingDashboard: React.FC = () => {
 
     if (!transporter || !truck) return;
 
+    // Optimistic Update
+    setTransporters(prev => prev.map(t => {
+      if (t.id === transporterId) {
+        return { ...t, trucks: t.trucks.filter(tr => tr.id !== truckId) };
+      }
+      return t;
+    }));
+
     // Send delete request to Apps Script
-    // NOTE: This requires your Google Apps Script to handle the 'deleteTruck' action
-    // looking for 'Code' and 'PlateNumber' to identify the row.
     const actionData = {
       Code: transporter.code,
       PlateNumber: truck.plateNumber
     };
 
-    submitToAppsScript('deleteTruck', actionData, () => {});
+    submitToAppsScript('deleteTruck', actionData, () => {}, true);
   };
 
   // Download template
@@ -486,7 +580,8 @@ const DredgingDashboard: React.FC = () => {
                Contractor: row.Contractor || row.contractor,
                ContractNumber: row.ContractNumber || row.contractNumber,
                PlateNumber: row.PlateNumber || row.plateNumber,
-               CapacityCbm: row.CapacityCbm || row.capacityCbm
+               CapacityCbm: row.CapacityCbm || row.capacityCbm,
+               TruckName: row.TruckName || row['Truck Name'] || row.truckName
              };
            } 
            // Add other types as needed...
