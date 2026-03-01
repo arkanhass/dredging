@@ -515,9 +515,9 @@ const DredgingDashboard: React.FC = () => {
       csv += 'DR-001,Dredger Alpha,1550,active,Marine Works Ltd,CNT-2024-001\n';
       filename = 'dredgers_template.csv';
     } else if (type === 'transporters') {
-      csv = 'Code,Name,RatePerCbm,Status,Contractor,ContractNumber,PlateNumber,CapacityCbm\n';
-      csv += 'TR-001,Quick Haul Transport,850,active,Quick Haul Ltd,CNT-2024-101,ABC-123,15\n';
-      csv += 'TR-001,Quick Haul Transport,850,active,Quick Haul Ltd,CNT-2024-101,ABC-124,18\n';
+      csv = 'Code,Name,RatePerCbm,Status,Contractor,ContractNumber,PlateNumber,CapacityCbm,TruckName\n';
+      csv += 'TR-001,Quick Haul Transport,850,active,Quick Haul Ltd,CNT-2024-101,ABC-123,15,Truck A\n';
+      csv += 'TR-001,Quick Haul Transport,850,active,Quick Haul Ltd,CNT-2024-101,ABC-124,18,Truck B\n';
       filename = 'transporters_template.csv';
     } else if (type === 'trips') {
       csv = 'Date,DredgerCode,TransporterCode,PlateNumber,Trips,DredgerRate,TransporterRate,DumpingLocation,Notes\n';
