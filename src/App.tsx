@@ -393,9 +393,22 @@ const DredgingDashboard: React.FC = () => {
   };
 
   const deleteTruck = async (transporterId: string, truckId: string) => {
-    // We log these to avoid unused variable warnings
-    console.log('Request to delete truck:', transporterId, truckId);
-    alert('Note: Truck deletion from Google Sheets requires manual action. Please delete the truck row directly in Google Sheets "Transporters" tab, then click "Sync Data" in the dashboard.');
+    if (!confirm('Are you sure you want to delete this truck? This will delete it from Google Sheets.')) return;
+
+    const transporter = transporters.find(t => t.id === transporterId);
+    const truck = transporter?.trucks.find(tr => tr.id === truckId);
+
+    if (!transporter || !truck) return;
+
+    // Send delete request to Apps Script
+    // NOTE: This requires your Google Apps Script to handle the 'deleteTruck' action
+    // looking for 'Code' and 'PlateNumber' to identify the row.
+    const actionData = {
+      Code: transporter.code,
+      PlateNumber: truck.plateNumber
+    };
+
+    submitToAppsScript('deleteTruck', actionData, () => {});
   };
 
   // Download template
