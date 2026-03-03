@@ -484,7 +484,7 @@ const DredgingDashboard: React.FC = () => {
       setPayments(prev => [...prev, newPayment]);
     }
 
-    const paymentData = {
+    const paymentData: any = {
       Date: paymentForm.date,
       EntityType: paymentForm.entityType,
       EntityCode: entityCode,
@@ -494,33 +494,16 @@ const DredgingDashboard: React.FC = () => {
       Notes: paymentForm.notes || '',
     };
 
-    // If editing, delete the old row first, then append the updated one
+    // If editing, include OldReference so Apps Script can find and update the row in-place
     if (editingItem) {
-      const oldReference = editingItem.reference;
-      const oldDate = editingItem.date;
-      
-      const closeModal = () => {
-        setShowPaymentModal(false);
-        setEditingItem(null);
-        setPaymentForm({});
-      };
-
-      // Step 1: Delete old row
-      submitToAppsScript('deletePayment', { date: oldDate, reference: oldReference }, () => {
-        // Step 2: Save new row after delete completes
-        setTimeout(() => {
-          submitToAppsScript('savePayment', paymentData, () => {}, true);
-        }, 500);
-      }, true);
-
-      closeModal();
-    } else {
-      setShowPaymentModal(false);
-      setEditingItem(null);
-      setPaymentForm({});
-
-      submitToAppsScript('savePayment', paymentData, () => {}, true);
+      paymentData.OldReference = editingItem.reference;
     }
+
+    setShowPaymentModal(false);
+    setEditingItem(null);
+    setPaymentForm({});
+
+    submitToAppsScript('savePayment', paymentData, () => {}, true);
   };
 
   const deleteItem = async (type: 'dredger' | 'transporter' | 'trip' | 'payment', id: string) => {
@@ -550,7 +533,6 @@ const DredgingDashboard: React.FC = () => {
       setPayments(prev => prev.filter(p => p.id !== id));
       actionName = 'deletePayment';
       actionData = { 
-        date: payment?.date,
         reference: payment?.reference
       };
     }
