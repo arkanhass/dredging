@@ -276,10 +276,12 @@ const DredgingDashboard: React.FC = () => {
 
   // Calculations
   const calculateDredgerEarnings = (dredgerId: string, tripsData = trips, paymentsData = payments) => {
+    const dredger = dredgers.find(d => d.id === dredgerId);
+    const dredgerCode = dredger?.code || '';
     const dredgerTrips = tripsData.filter(t => t.dredgerId === dredgerId);
     const totalVolume = dredgerTrips.reduce((sum, t) => sum + t.totalVolume, 0);
     const totalAmount = dredgerTrips.reduce((sum, t) => sum + (t.totalVolume * (t.dredgerRate || 0)), 0);
-    const totalPaid = paymentsData.filter(p => p.entityType === 'dredger' && p.entityId === dredgerId).reduce((sum, p) => sum + p.amount, 0);
+    const totalPaid = paymentsData.filter(p => p.entityType === 'dredger' && (p.entityId === dredgerId || p.entityId === dredgerCode)).reduce((sum, p) => sum + p.amount, 0);
     return { totalVolume, totalAmount, totalPaid, balance: totalAmount - totalPaid };
   };
 
@@ -457,9 +459,9 @@ const DredgingDashboard: React.FC = () => {
     if(e) e.preventDefault();
     
     let entityCode = '';
-    if (paymentForm.entityType === 'dredger') {
-      const entity = dredgers.find(d => d.id === paymentForm.entityId);
-      entityCode = entity?.code || '';
+    if ((paymentForm.entityType || 'dredger') === 'dredger') {
+      const entity = dredgers.find(d => d.id === paymentForm.entityId || d.code === paymentForm.entityId);
+      entityCode = entity?.code || paymentForm.entityId || '';
     } else {
       // For transporters, the entityId is the Contractor Name itself
       entityCode = paymentForm.entityId || '';
@@ -469,10 +471,10 @@ const DredgingDashboard: React.FC = () => {
       id: editingItem ? editingItem.id : `temp-${Date.now()}`,
       date: paymentForm.date || '',
       entityType: paymentForm.entityType || 'dredger',
-      entityId: paymentForm.entityId || '',
+      entityId: entityCode,
       amount: paymentForm.amount || 0,
       paymentMethod: paymentForm.paymentMethod || 'Bank Transfer',
-      reference: paymentForm.reference || '',
+      reference: paymentForm.reference || `PAY-${Date.now()}`,
       notes: paymentForm.notes || ''
     };
 
@@ -488,15 +490,37 @@ const DredgingDashboard: React.FC = () => {
       EntityCode: entityCode,
       Amount: paymentForm.amount,
       PaymentMethod: paymentForm.paymentMethod || 'Bank Transfer',
-      Reference: paymentForm.reference || `PAY-${Date.now()}`,
+      Reference: paymentForm.reference || newPayment.reference,
       Notes: paymentForm.notes || '',
     };
 
-    setShowPaymentModal(false);
-    setEditingItem(null);
-    setPaymentForm({});
+    // If editing, delete the old row first, then append the updated one
+    if (editingItem) {
+      const oldReference = editingItem.reference;
+      const oldDate = editingItem.date;
+      
+      const closeModal = () => {
+        setShowPaymentModal(false);
+        setEditingItem(null);
+        setPaymentForm({});
+      };
 
-    submitToAppsScript('savePayment', paymentData, () => {}, true);
+      // Step 1: Delete old row
+      submitToAppsScript('deletePayment', { date: oldDate, reference: oldReference }, () => {
+        // Step 2: Save new row after delete completes
+        setTimeout(() => {
+          submitToAppsScript('savePayment', paymentData, () => {}, true);
+        }, 500);
+      }, true);
+
+      closeModal();
+    } else {
+      setShowPaymentModal(false);
+      setEditingItem(null);
+      setPaymentForm({});
+
+      submitToAppsScript('savePayment', paymentData, () => {}, true);
+    }
   };
 
   const deleteItem = async (type: 'dredger' | 'transporter' | 'trip' | 'payment', id: string) => {
@@ -798,7 +822,7 @@ const DredgingDashboard: React.FC = () => {
       payments.forEach(p => {
         let entityName = '';
         if (p.entityType === 'dredger') {
-             entityName = dredgers.find(d => d.id === p.entityId)?.name || '';
+             entityName = dredgers.find(d => d.id === p.entityId || d.code === p.entityId)?.name || p.entityId || '';
         } else {
              entityName = p.entityId; // For transporters, entityId is the Contractor Name
         }
@@ -1612,7 +1636,7 @@ const DredgingDashboard: React.FC = () => {
                   <span>Import</span>
                 </button>
                 <button
-                  onClick={() => { setEditingItem(null); setPaymentForm({ date: new Date().toISOString().split('T')[0] }); setShowPaymentModal(true); }}
+                  onClick={() => { setEditingItem(null); setPaymentForm({ date: new Date().toISOString().split('T')[0], entityType: 'dredger' }); setShowPaymentModal(true); }}
                   className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2"
                 >
                   <Plus className="w-5 h-5" />
@@ -1646,8 +1670,8 @@ const DredgingDashboard: React.FC = () => {
                   {payments.map(payment => {
                     let entityName = '';
                     if (payment.entityType === 'dredger') {
-                        const dr = dredgers.find(d => d.id === payment.entityId);
-                        entityName = dr?.name || '';
+                        const dr = dredgers.find(d => d.id === payment.entityId || d.code === payment.entityId);
+                        entityName = dr?.name || payment.entityId || '';
                     } else {
                         // For transporters, the entityId IS the contractor name
                         entityName = payment.entityId;
@@ -2278,13 +2302,17 @@ const DredgingDashboard: React.FC = () => {
               <div>
                 <label className="block text-sm font-medium text-gray-700">Entity</label>
                 <select
-                  value={paymentForm.entityId || ''}
+                  value={
+                    (paymentForm.entityType || 'dredger') === 'dredger'
+                      ? (dredgers.find(d => d.id === paymentForm.entityId || d.code === paymentForm.entityId)?.code || paymentForm.entityId || '')
+                      : (paymentForm.entityId || '')
+                  }
                   onChange={(e) => setPaymentForm({ ...paymentForm, entityId: e.target.value })}
                   className="w-full px-3 py-2 border rounded-lg"
                 >
                   <option value="">Select Entity</option>
-                  {paymentForm.entityType === 'dredger'
-                    ? dredgers.map(d => <option key={d.id} value={d.id}>{d.name}</option>)
+                  {(paymentForm.entityType || 'dredger') === 'dredger'
+                    ? dredgers.map(d => <option key={d.code} value={d.code}>{d.name}</option>)
                     : Array.from(new Set(
                         transporters.map(t => t.contractor ? t.contractor.trim() : '').filter(c => c !== '')
                       )).sort().map(contractor => (
