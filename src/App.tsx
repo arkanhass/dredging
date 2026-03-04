@@ -1,16 +1,25 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { 
-  Plus, Edit, Trash2, Download, Upload, FileSpreadsheet,
-  Ship, Truck, Calendar, BarChart3, Activity
-} from 'lucide-react';
+import React, { useState, useEffect, useRef } from "react";
+import {
+  Plus,
+  Edit,
+  Trash2,
+  Download,
+  Upload,
+  FileSpreadsheet,
+  Ship,
+  Truck,
+  Calendar,
+  BarChart3,
+  Activity,
+} from "lucide-react";
+import * as XLSX from "xlsx";
 
 // Custom Naira Icon Component
 const NairaIcon: React.FC<{ className?: string }> = ({ className = "w-6 h-6" }) => (
-  <span className={`inline-flex items-center justify-center font-bold ${className}`} style={{ fontSize: 'inherit' }}>
+  <span className={`inline-flex items-center justify-center font-bold ${className}`} style={{ fontSize: "inherit" }}>
     ₦
   </span>
 );
-import * as XLSX from 'xlsx';
 
 // Types
 interface Dredger {
@@ -18,7 +27,7 @@ interface Dredger {
   name: string;
   code: string;
   ratePerCbm: number;
-  status: 'active' | 'inactive';
+  status: "active" | "inactive";
   contractor: string;
   contractNumber: string;
 }
@@ -29,7 +38,7 @@ interface TruckRecord {
   plateNumber: string;
   capacityCbm: number;
   transporterId: string;
-  status: 'active' | 'inactive';
+  status: "active" | "inactive";
   truckName?: string;
 }
 
@@ -38,7 +47,7 @@ interface Transporter {
   name: string;
   code: string;
   ratePerCbm: number;
-  status: 'active' | 'inactive';
+  status: "active" | "inactive";
   contractor: string;
   contractNumber: string;
   trucks: TruckRecord[];
@@ -56,6 +65,8 @@ interface Trip {
   totalVolume: number;
   dredgerRate: number;
   transporterRate: number;
+  dredgerAmount: number;
+  transporterAmount: number;
   dumpingLocation: string;
   notes: string;
 }
@@ -63,7 +74,7 @@ interface Trip {
 interface Payment {
   id: string;
   date: string;
-  entityType: 'dredger' | 'transporter';
+  entityType: "dredger" | "transporter";
   entityId: string;
   amount: number;
   paymentMethod: string;
@@ -73,37 +84,37 @@ interface Payment {
 
 // Google Sheets Configuration
 const GOOGLE_SHEETS_CONFIG = {
-  apiKey: 'AIzaSyAYwHOV-1YIa1lAheSZ-fTlh-_UWnWWpgk',
-  spreadsheetId: '1RNPjQ-JxUJiF85pBb-0sqbdkWwmGV1Q23cT5qgFFauM',
+  apiKey: "AIzaSyAYwHOV-1YIa1lAheSZ-fTlh-_UWnWWpgk",
+  spreadsheetId: "1RNPjQ-JxUJiF85pBb-0sqbdkWwmGV1Q23cT5qgFFauM",
 };
 
 // === DATE HELPERS ===
 const formatDisplayDate = (isoOrRaw: string): string => {
-  if (!isoOrRaw) return '';
+  if (!isoOrRaw) return "";
 
   // Handle ISO-like formats (YYYY-MM-DD)
   if (/^\d{4}-\d{2}-\d{2}$/.test(isoOrRaw)) {
-    const [y, m, d] = isoOrRaw.split('-');
+    const [y, m, d] = isoOrRaw.split("-");
     return `${d}-${m}-${y}`;
   }
 
   // Handle DD/MM/YYYY or D/M/YYYY
   if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(isoOrRaw)) {
-    const [d, m, y] = isoOrRaw.split('/');
-    return `${d.padStart(2, '0')}-${m.padStart(2, '0')}-${y}`;
+    const [d, m, y] = isoOrRaw.split("/");
+    return `${d.padStart(2, "0")}-${m.padStart(2, "0")}-${y}`;
   }
 
   // Handle DD-MM-YYYY or D-M-YYYY
   if (/^\d{1,2}-\d{1,2}-\d{4}$/.test(isoOrRaw)) {
-    const [d, m, y] = isoOrRaw.split('-');
-    return `${d.padStart(2, '0')}-${m.padStart(2, '0')}-${y}`;
+    const [d, m, y] = isoOrRaw.split("-");
+    return `${d.padStart(2, "0")}-${m.padStart(2, "0")}-${y}`;
   }
 
   // Fallback: try Date.parse
   const dt = new Date(isoOrRaw);
   if (!isNaN(dt.getTime())) {
-    const d = String(dt.getDate()).padStart(2, '0');
-    const m = String(dt.getMonth() + 1).padStart(2, '0');
+    const d = String(dt.getDate()).padStart(2, "0");
+    const m = String(dt.getMonth() + 1).padStart(2, "0");
     const y = dt.getFullYear();
     return `${d}-${m}-${y}`;
   }
@@ -113,23 +124,23 @@ const formatDisplayDate = (isoOrRaw: string): string => {
 
 const toSortableISO = (d: string): string => {
   // Convert whatever we got into YYYY-MM-DD for sorting
-  if (!d) return '';
+  if (!d) return "";
   if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return d; // already ISO
 
   if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(d)) {
-    const [day, month, year] = d.split('/');
-    return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+    const [day, month, year] = d.split("/");
+    return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
   }
 
   if (/^\d{1,2}-\d{1,2}-\d{4}$/.test(d)) {
-    const [day, month, year] = d.split('-');
-    return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+    const [day, month, year] = d.split("-");
+    return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
   }
 
   const dt = new Date(d);
   if (!isNaN(dt.getTime())) {
-    const day = String(dt.getDate()).padStart(2, '0');
-    const month = String(dt.getMonth() + 1).padStart(2, '0');
+    const day = String(dt.getDate()).padStart(2, "0");
+    const month = String(dt.getMonth() + 1).padStart(2, "0");
     const year = dt.getFullYear();
     return `${year}-${month}-${day}`;
   }
@@ -137,32 +148,40 @@ const toSortableISO = (d: string): string => {
   return d; // fallback
 };
 
+const parseMoney = (val: any) => {
+  if (val === undefined || val === null) return 0;
+  const num = parseFloat(String(val).replace(/,/g, ""));
+  return Number.isFinite(num) ? num : 0;
+};
+
 const DredgingDashboard: React.FC = () => {
   // State
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'dredgers' | 'transporters' | 'trips' | 'payments' | 'reports'>('dashboard');
+  const [activeTab, setActiveTab] = useState<
+    "dashboard" | "dredgers" | "transporters" | "trips" | "payments" | "reports"
+  >("dashboard");
   const [dredgers, setDredgers] = useState<Dredger[]>([]);
   const [transporters, setTransporters] = useState<Transporter[]>([]);
   const [trips, setTrips] = useState<Trip[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
-  
+
   // Modal states
   const [showDredgerModal, setShowDredgerModal] = useState(false);
   const [showTransporterModal, setShowTransporterModal] = useState(false);
   const [showTripModal, setShowTripModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [editingItem, setEditingItem] = useState<any>(null);
-  
+
   // Search and filter
-  const [searchTerm, setSearchTerm] = useState('');
-  const [dateFilter, setDateFilter] = useState({ start: '', end: '' });
-  const [dashboardDateFilter, setDashboardDateFilter] = useState({ start: '', end: '' });
-  
+  const [searchTerm, setSearchTerm] = useState("");
+  const [dateFilter, setDateFilter] = useState({ start: "", end: "" });
+  const [dashboardDateFilter, setDashboardDateFilter] = useState({ start: "", end: "" });
+
   // Form states
   const [dredgerForm, setDredgerForm] = useState<Partial<Dredger>>({});
   const [transporterForm, setTransporterForm] = useState<Partial<Transporter>>({});
   const [tripForm, setTripForm] = useState<Partial<Trip>>({});
   const [paymentForm, setPaymentForm] = useState<Partial<Payment>>({});
-  
+
   // File input refs
   const dredgerFileInput = useRef<HTMLInputElement>(null);
   const transporterFileInput = useRef<HTMLInputElement>(null);
@@ -177,37 +196,53 @@ const DredgingDashboard: React.FC = () => {
   const loadDataFromSheets = async () => {
     try {
       // 1. Load Dredgers
-      const drRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${GOOGLE_SHEETS_CONFIG.spreadsheetId}/values/Dredgers?key=${GOOGLE_SHEETS_CONFIG.apiKey}`);
+      const drRes = await fetch(
+        `https://sheets.googleapis.com/v4/spreadsheets/${GOOGLE_SHEETS_CONFIG.spreadsheetId}/values/Dredgers?key=${GOOGLE_SHEETS_CONFIG.apiKey}`
+      );
       const drData = await drRes.json();
-      const loadedDredgers = (drData.values || []).slice(1).map((row: any[], i: number) => ({
-        id: (row[0] || i).toString() + "_" + i, // Unique ID fix
-        code: row[0], name: row[1], ratePerCbm: parseFloat(row[2]) || 0,
-        status: (row[3] || 'active').toLowerCase() as any, contractor: row[4], contractNumber: row[5]
-      })).filter((d: any) => d.code);
+      const loadedDredgers = (drData.values || [])
+        .slice(1)
+        .map((row: any[], i: number) => ({
+          id: (row[0] || i).toString() + "_" + i, // Unique ID fix
+          code: row[0],
+          name: row[1],
+          ratePerCbm: parseFloat(row[2]) || 0,
+          status: (row[3] || "active").toLowerCase() as any,
+          contractor: row[4],
+          contractNumber: row[5],
+        }))
+        .filter((d: any) => d.code);
       setDredgers(loadedDredgers);
-  
+
       // 2. Load Transporters & Trucks
-      const trRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${GOOGLE_SHEETS_CONFIG.spreadsheetId}/values/Transporters?key=${GOOGLE_SHEETS_CONFIG.apiKey}`);
+      const trRes = await fetch(
+        `https://sheets.googleapis.com/v4/spreadsheets/${GOOGLE_SHEETS_CONFIG.spreadsheetId}/values/Transporters?key=${GOOGLE_SHEETS_CONFIG.apiKey}`
+      );
       const trData = await trRes.json();
       const trRows = trData.values || [];
       const transporterMap = new Map<string, any>();
-  
+
       trRows.slice(1).forEach((row: any[]) => {
         const code = row[0];
         if (!code) return;
-  
+
         if (!transporterMap.has(code)) {
           transporterMap.set(code, {
-            id: code, code, name: row[1], ratePerCbm: parseFloat(row[2]) || 0,
-            status: (row[3] || 'active').toLowerCase(), contractor: row[4], contractNumber: row[5],
-            trucks: []
+            id: code,
+            code,
+            name: row[1],
+            ratePerCbm: parseFloat(row[2]) || 0,
+            status: (row[3] || "active").toLowerCase(),
+            contractor: row[4],
+            contractNumber: row[5],
+            trucks: [],
           });
         }
-  
-        const truckName = row[6] || 'Unnamed';
+
+        const truckName = row[6] || "Unnamed";
         const plateNumber = row[7];
         const capacity = parseFloat(row[8]);
-  
+
         if (plateNumber) {
           const transporter = transporterMap.get(code);
           if (!transporter.trucks.find((t: any) => t.plateNumber === plateNumber)) {
@@ -216,65 +251,87 @@ const DredgingDashboard: React.FC = () => {
               truckName: truckName,
               plateNumber: plateNumber,
               capacityCbm: isNaN(capacity) ? 0 : capacity,
-              status: 'active',
+              status: "active",
             });
           }
         }
       });
       setTransporters(Array.from(transporterMap.values()));
-  
+
       // 3. Load Trips
-      const tripRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${GOOGLE_SHEETS_CONFIG.spreadsheetId}/values/Trips?key=${GOOGLE_SHEETS_CONFIG.apiKey}`);
+      const tripRes = await fetch(
+        `https://sheets.googleapis.com/v4/spreadsheets/${GOOGLE_SHEETS_CONFIG.spreadsheetId}/values/Trips?key=${GOOGLE_SHEETS_CONFIG.apiKey}`
+      );
       const tripData = await tripRes.json();
-      
-      setTrips((tripData.values || []).slice(1).map((row: any[], i: number) => {
-        const rawDate = row[0] || '';
-        const dredgerCode = row[1];
-        const transporterCode = row[2];
-        const plateNumber = row[3];
 
-        const transporter = transporterMap.get(transporterCode);
-        const truck = transporter?.trucks.find((t: any) => t.plateNumber === plateNumber);
-        const capacityCbm = truck?.capacityCbm || 0;
-        const tripsCount = parseInt(row[4]) || 0;
+      setTrips(
+        (tripData.values || []).slice(1).map((row: any[], i: number) => {
+          const rawDate = row[0] || "";
+          const dredgerCode = row[1];
+          const transporterCode = row[2];
+          const plateNumber = row[3];
 
-        return {
-          id: `trip-${i}`, 
-          date: rawDate, 
-          dredgerId: loadedDredgers.find((d: Dredger) => d.code === dredgerCode)?.id || '',
-          transporterId: transporterCode, 
-          truckId: truck?.id || '',
-          plateNumber: plateNumber, 
-          trips: tripsCount,
-          capacityCbm: capacityCbm,
-          totalVolume: tripsCount * capacityCbm,
-          dredgerRate: parseFloat(row[5]) || 0, 
-          transporterRate: parseFloat(row[6]) || 0, 
-          dumpingLocation: row[7],
-          notes: row[8] || ''
-        } as Trip;
-      }));
-  
+          const transporter = transporterMap.get(transporterCode);
+          const truck = transporter?.trucks.find((t: any) => t.plateNumber === plateNumber);
+          const capacityCbm = parseMoney(row[8]) || truck?.capacityCbm || truck?.capacityCbm || 0; // fallback to sheet cap if provided
+          const tripsCount = parseInt(row[4]) || 0;
+
+          const dredgerRate = parseMoney(row[5]);
+          const transporterRate = parseMoney(row[6]);
+          const dredgerAmount = parseMoney(row[9]) || tripsCount * capacityCbm * dredgerRate;
+          const transporterAmount = parseMoney(row[10]) || tripsCount * capacityCbm * transporterRate;
+
+          return {
+            id: `trip-${i}`,
+            date: rawDate,
+            dredgerId: loadedDredgers.find((d: Dredger) => d.code === dredgerCode)?.id || "",
+            transporterId: transporterCode,
+            truckId: truck?.id || "",
+            plateNumber: plateNumber,
+            trips: tripsCount,
+            capacityCbm: capacityCbm,
+            totalVolume: tripsCount * capacityCbm,
+            dredgerRate,
+            transporterRate,
+            dredgerAmount,
+            transporterAmount,
+            dumpingLocation: row[7],
+            notes: row[8] || "",
+          } satisfies Trip;
+        })
+      );
+
       // 4. Load Payments
-      const payRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${GOOGLE_SHEETS_CONFIG.spreadsheetId}/values/Payments?key=${GOOGLE_SHEETS_CONFIG.apiKey}`);
+      const payRes = await fetch(
+        `https://sheets.googleapis.com/v4/spreadsheets/${GOOGLE_SHEETS_CONFIG.spreadsheetId}/values/Payments?key=${GOOGLE_SHEETS_CONFIG.apiKey}`
+      );
       const payData = await payRes.json();
-      setPayments((payData.values || []).slice(1).map((row: any[], i: number) => ({
-        id: `pay-${i}`, date: row[0], entityType: (row[1] || 'dredger').toLowerCase() as any,
-        entityId: row[2], amount: parseFloat(row[3]) || 0, paymentMethod: row[4] || 'Bank Transfer', reference: row[5], notes: row[6] || ''
-      })));
-  
-    } catch (err) { console.error(err); }
+      setPayments(
+        (payData.values || []).slice(1).map((row: any[], i: number) => ({
+          id: `pay-${i}`,
+          date: row[0],
+          entityType: (row[1] || "dredger").toLowerCase() as any,
+          entityId: row[2],
+          amount: parseFloat(row[3]) || 0,
+          paymentMethod: row[4] || "Bank Transfer",
+          reference: row[5],
+          notes: row[6] || "",
+        }))
+      );
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   // Filtered data for Dashboard
-  const dashboardTrips = trips.filter(t => {
+  const dashboardTrips = trips.filter((t) => {
     const isoDate = toSortableISO(t.date);
     const afterStart = !dashboardDateFilter.start || isoDate >= toSortableISO(dashboardDateFilter.start);
     const beforeEnd = !dashboardDateFilter.end || isoDate <= toSortableISO(dashboardDateFilter.end);
     return afterStart && beforeEnd;
   });
 
-  const dashboardPayments = payments.filter(p => {
+  const dashboardPayments = payments.filter((p) => {
     const isoDate = toSortableISO(p.date);
     const afterStart = !dashboardDateFilter.start || isoDate >= toSortableISO(dashboardDateFilter.start);
     const beforeEnd = !dashboardDateFilter.end || isoDate <= toSortableISO(dashboardDateFilter.end);
@@ -283,59 +340,88 @@ const DredgingDashboard: React.FC = () => {
 
   // Calculations
   const calculateDredgerEarnings = (dredgerId: string, tripsData = trips, paymentsData = payments) => {
-    const dredger = dredgers.find(d => d.id === dredgerId);
-    const dredgerCode = dredger?.code || '';
-    const dredgerTrips = tripsData.filter(t => t.dredgerId === dredgerId);
+    const dredger = dredgers.find((d) => d.id === dredgerId);
+    const dredgerCode = dredger?.code || "";
+    const dredgerTrips = tripsData.filter((t) => t.dredgerId === dredgerId);
     const totalVolume = dredgerTrips.reduce((sum, t) => sum + t.totalVolume, 0);
-    const totalAmount = dredgerTrips.reduce((sum, t) => sum + (t.totalVolume * (t.dredgerRate || 0)), 0);
-    const totalPaid = paymentsData.filter(p => p.entityType === 'dredger' && (p.entityId === dredgerId || p.entityId === dredgerCode)).reduce((sum, p) => sum + p.amount, 0);
+    const totalAmount = dredgerTrips.reduce(
+      (sum, t) =>
+        sum + (Number.isFinite(t.dredgerAmount) ? t.dredgerAmount : t.totalVolume * (t.dredgerRate || 0)),
+      0
+    );
+    const totalPaid = paymentsData
+      .filter((p) => p.entityType === "dredger" && (p.entityId === dredgerId || p.entityId === dredgerCode))
+      .reduce((sum, p) => sum + p.amount, 0);
     return { totalVolume, totalAmount, totalPaid, balance: totalAmount - totalPaid };
   };
 
-  const calculateTransporterEarnings = (transporterId: string, tripsData = trips, paymentsData = payments) => {
-    const transporter = transporters.find(t => t.id === transporterId);
-    const transporterCode = transporter?.code || '';
-    const contractorName = transporter?.contractor?.trim() || '';
+  const calculateTransporterEarnings = (
+    transporterId: string,
+    tripsData = trips,
+    paymentsData = payments
+  ) => {
+    const transporter = transporters.find((t) => t.id === transporterId);
+    const transporterCode = transporter?.code || "";
+    const contractorName = transporter?.contractor?.trim() || "";
 
-    const transporterTrips = tripsData.filter(t => t.transporterId === transporterId);
+    const transporterTrips = tripsData.filter((t) => t.transporterId === transporterId);
     const totalTrips = transporterTrips.reduce((sum, t) => sum + t.trips, 0);
-    const totalVolume = transporterTrips.reduce((sum, t) => sum + t.totalVolume, 0);
-    
-    // User confirmed Rate is Per CBM
-    const totalAmount = transporterTrips.reduce((sum, t) => {
-       return sum + (t.totalVolume * (t.transporterRate || 0));
+    const totalVolume = transporterTrips.reduce((sum, t) => {
+      const vol = Number.isFinite(t.totalVolume)
+        ? t.totalVolume
+        : (t.capacityCbm || 0) * (t.trips || 0);
+      return sum + vol;
     }, 0);
-    
-    // Match payments by transporterId, transporter code, or contractor name
-    const totalPaid = paymentsData.filter(p => {
-      if (p.entityType !== 'transporter') return false;
-      return p.entityId === transporterId || 
-             p.entityId === transporterCode || 
-             (contractorName && p.entityId === contractorName);
-    }).reduce((sum, p) => sum + p.amount, 0);
-    return { totalTrips, totalVolume, totalAmount, totalPaid, balance: totalAmount - totalPaid };
+    const totalAmount = transporterTrips.reduce((sum, t) => {
+      // Always prefer sheet-provided transporterAmount (each trip may have its own rate/amount)
+      const amtFromSheet = Number.isFinite(t.transporterAmount) ? t.transporterAmount : undefined;
+      const fallbackAmt = (Number.isFinite(t.totalVolume) ? t.totalVolume : (t.capacityCbm || 0) * (t.trips || 0)) * (t.transporterRate || 0);
+      return sum + (amtFromSheet ?? fallbackAmt);
+    }, 0);
+
+    const totalPaid = paymentsData
+      .filter((p) => {
+        if (p.entityType !== "transporter") return false;
+        return p.entityId === transporterId || p.entityId === transporterCode || (contractorName && p.entityId === contractorName);
+      })
+      .reduce((sum, p) => sum + p.amount, 0);
+
+    return {
+      totalTrips,
+      totalVolume,
+      totalAmount,
+      totalPaid,
+      balance: totalAmount - totalPaid,
+    };
   };
 
   const overallStats = {
     totalVolume: dashboardTrips.reduce((sum, t) => sum + t.totalVolume, 0),
     totalTrips: dashboardTrips.reduce((sum, t) => sum + t.trips, 0),
-    totalDredgerCost: dashboardTrips.reduce((sum, t) => sum + (t.totalVolume * (t.dredgerRate || 0)), 0),
-    totalTransporterCost: dashboardTrips.reduce((sum, t) => sum + (t.totalVolume * (t.transporterRate || 0)), 0),
+    totalDredgerCost: dashboardTrips.reduce(
+      (sum, t) => sum + (Number.isFinite(t.dredgerAmount) ? t.dredgerAmount : t.totalVolume * (t.dredgerRate || 0)),
+      0
+    ),
+    totalTransporterCost: dashboardTrips.reduce(
+      (sum, t) => sum + (Number.isFinite(t.transporterAmount) ? t.transporterAmount : t.totalVolume * (t.transporterRate || 0)),
+      0
+    ),
     totalPaid: dashboardPayments.reduce((sum, p) => sum + p.amount, 0),
   };
 
   // Google Apps Script URL
-  const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwTimTnSOaCkAmPxNAAi3Yio12mr5pxYTywcQfx3lhDkZMzCuKm6omq2g_KxtOdYBws7w/exec';
+  const APPS_SCRIPT_URL =
+    "https://script.google.com/macros/s/AKfycbwTimTnSOaCkAmPxNAAi3Yio12mr5pxYTywcQfx3lhDkZMzCuKm6omq2g_KxtOdYBws7w/exec";
 
   const submitToAppsScript = async (action: string, data: any, onSuccess: () => void, silent = false) => {
     const payload = { action, data };
-    
+
     try {
       await fetch(APPS_SCRIPT_URL, {
-        method: 'POST',
-        mode: 'no-cors',
+        method: "POST",
+        mode: "no-cors",
         headers: {
-          'Content-Type': 'text/plain',
+          "Content-Type": "text/plain",
         },
         body: JSON.stringify(payload),
       });
@@ -344,20 +430,19 @@ const DredgingDashboard: React.FC = () => {
         setTimeout(async () => {
           await loadDataFromSheets();
           onSuccess();
-          alert('Action completed! Data reloading...');
+          alert("Action completed! Data reloading...");
         }, 2500);
       } else {
         onSuccess();
         setTimeout(() => loadDataFromSheets(), 3000);
       }
-
     } catch (error) {
       console.warn("Fetch error (likely CORS false positive):", error);
       if (!silent) {
         setTimeout(async () => {
           await loadDataFromSheets();
           onSuccess();
-          alert('Action completed! Data reloading... (UI updated)');
+          alert("Action completed! Data reloading... (UI updated)");
         }, 2500);
       } else {
         onSuccess();
@@ -368,47 +453,47 @@ const DredgingDashboard: React.FC = () => {
 
   // CRUD Operations
   const saveDredger = async (e?: React.FormEvent) => {
-    if(e) e.preventDefault();
+    if (e) e.preventDefault();
     if (editingItem) {
-      setDredgers(prev => prev.map(d => d.id === editingItem.id ? { ...d, ...dredgerForm } as Dredger : d));
+      setDredgers((prev) => prev.map((d) => (d.id === editingItem.id ? { ...d, ...dredgerForm } as Dredger : d)));
     } else {
       const newDredger = { ...dredgerForm, id: `temp-${Date.now()}` } as Dredger;
-      setDredgers(prev => [...prev, newDredger]);
+      setDredgers((prev) => [...prev, newDredger]);
     }
 
     const dredgerData = {
       Code: dredgerForm.code,
       Name: dredgerForm.name,
       RatePerCbm: dredgerForm.ratePerCbm,
-      Status: dredgerForm.status || 'active',
-      Contractor: dredgerForm.contractor || '',
-      ContractNumber: dredgerForm.contractNumber || '',
+      Status: dredgerForm.status || "active",
+      Contractor: dredgerForm.contractor || "",
+      ContractNumber: dredgerForm.contractNumber || "",
     };
 
     setShowDredgerModal(false);
     setEditingItem(null);
     setDredgerForm({});
 
-    submitToAppsScript('saveDredger', dredgerData, () => {}, true);
+    submitToAppsScript("saveDredger", dredgerData, () => {}, true);
   };
 
   const saveTransporter = async (e?: React.FormEvent) => {
-    if(e) e.preventDefault();
+    if (e) e.preventDefault();
     if (editingItem) {
-      setTransporters(prev => prev.map(t => t.id === editingItem.id ? { ...t, ...transporterForm } as Transporter : t));
+      setTransporters((prev) => prev.map((t) => (t.id === editingItem.id ? { ...t, ...transporterForm } as Transporter : t)));
     } else {
       const newTransporter = { ...transporterForm, id: `temp-${Date.now()}`, trucks: [] } as Transporter;
-      setTransporters(prev => [...prev, newTransporter]);
+      setTransporters((prev) => [...prev, newTransporter]);
     }
 
     const transporterData = {
       Code: transporterForm.code,
       Name: transporterForm.name,
       RatePerCbm: transporterForm.ratePerCbm,
-      Status: transporterForm.status || 'active',
-      Contractor: transporterForm.contractor || '',
-      ContractNumber: transporterForm.contractNumber || '',
-      PlateNumber: '', 
+      Status: transporterForm.status || "active",
+      Contractor: transporterForm.contractor || "",
+      ContractNumber: transporterForm.contractNumber || "",
+      PlateNumber: "",
       CapacityCbm: 0,
     };
 
@@ -416,180 +501,179 @@ const DredgingDashboard: React.FC = () => {
     setEditingItem(null);
     setTransporterForm({});
 
-    submitToAppsScript('saveTransporter', transporterData, () => {}, true);
+    submitToAppsScript("saveTransporter", transporterData, () => {}, true);
   };
 
   const saveTrip = async (e?: React.FormEvent) => {
-    if(e) e.preventDefault();
-    const allTrucks = transporters.flatMap(t => t.trucks);
-    const truck = allTrucks.find(tr => tr.id === tripForm.truckId);
-    const dredger = dredgers.find(d => d.id === tripForm.dredgerId);
-    const transporter = transporters.find(t => t.id === tripForm.transporterId);
-    
+    if (e) e.preventDefault();
+    const allTrucks = transporters.flatMap((t) => t.trucks);
+    const truck = allTrucks.find((tr) => tr.id === tripForm.truckId);
+    const dredger = dredgers.find((d) => d.id === tripForm.dredgerId);
+    const transporter = transporters.find((t) => t.id === tripForm.transporterId);
+
     const tripsCount = tripForm.trips || 0;
     const capacity = truck?.capacityCbm || 0;
+    const dredgerRate = tripForm.dredgerRate ?? dredger?.ratePerCbm ?? 0;
+    const transporterRate = tripForm.transporterRate ?? transporter?.ratePerCbm ?? 0;
+    const dredgerAmount = tripForm.dredgerAmount ?? tripsCount * capacity * dredgerRate;
+    const transporterAmount = tripForm.transporterAmount ?? tripsCount * capacity * transporterRate;
 
     const newTrip: Trip = {
       id: editingItem ? editingItem.id : `temp-${Date.now()}`,
-      date: tripForm.date || '',
-      dredgerId: tripForm.dredgerId || '',
-      transporterId: tripForm.transporterId || '',
-      truckId: tripForm.truckId || '',
-      plateNumber: truck?.plateNumber || '',
+      date: tripForm.date || "",
+      dredgerId: tripForm.dredgerId || "",
+      transporterId: tripForm.transporterId || "",
+      truckId: tripForm.truckId || "",
+      plateNumber: truck?.plateNumber || "",
       trips: tripsCount,
       capacityCbm: capacity,
       totalVolume: tripsCount * capacity,
-      dredgerRate: dredger?.ratePerCbm || 0,
-      transporterRate: transporter?.ratePerCbm || 0,
-      dumpingLocation: tripForm.dumpingLocation || '',
-      notes: tripForm.notes || ''
+      dredgerRate,
+      transporterRate,
+      dredgerAmount,
+      transporterAmount,
+      dumpingLocation: tripForm.dumpingLocation || "",
+      notes: tripForm.notes || "",
     };
 
     if (editingItem) {
-      setTrips(prev => prev.map(t => t.id === editingItem.id ? newTrip : t));
+      setTrips((prev) => prev.map((t) => (t.id === editingItem.id ? newTrip : t)));
     } else {
-      setTrips(prev => [...prev, newTrip]);
+      setTrips((prev) => [...prev, newTrip]);
     }
 
     const tripData = {
       Date: tripForm.date,
-      DredgerCode: dredger?.code || '',
-      TransporterCode: transporter?.code || '',
-      PlateNumber: truck?.plateNumber || '',
+      DredgerCode: dredger?.code || "",
+      TransporterCode: transporter?.code || "",
+      PlateNumber: truck?.plateNumber || "",
       Trips: tripsCount,
-      DredgerRate: dredger?.ratePerCbm || 0,
-      TransporterRate: transporter?.ratePerCbm || 0,
-      DumpingLocation: tripForm.dumpingLocation || '',
-      Notes: tripForm.notes || '',
-      DredgerAmount: tripsCount * capacity * (dredger?.ratePerCbm || 0),
-      TransporterAmount: tripsCount * capacity * (transporter?.ratePerCbm || 0),
+      DredgerRate: dredgerRate,
+      TransporterRate: transporterRate,
+      DumpingLocation: tripForm.dumpingLocation || "",
+      Notes: tripForm.notes || "",
+      DredgerAmount: dredgerAmount,
+      TransporterAmount: transporterAmount,
     };
 
     setShowTripModal(false);
     setEditingItem(null);
     setTripForm({});
 
-    submitToAppsScript('saveTrip', tripData, () => {}, true);
+    submitToAppsScript("saveTrip", tripData, () => {}, true);
   };
 
   const savePayment = async (e?: React.FormEvent) => {
-    if(e) e.preventDefault();
-    
-    let entityCode = '';
-    if ((paymentForm.entityType || 'dredger') === 'dredger') {
-      const entity = dredgers.find(d => d.id === paymentForm.entityId || d.code === paymentForm.entityId);
-      entityCode = entity?.code || paymentForm.entityId || '';
+    if (e) e.preventDefault();
+
+    let entityCode = "";
+    if ((paymentForm.entityType || "dredger") === "dredger") {
+      const entity = dredgers.find((d) => d.id === paymentForm.entityId || d.code === paymentForm.entityId);
+      entityCode = entity?.code || paymentForm.entityId || "";
     } else {
-      // For transporters, resolve code to contractor name if needed
-      const rawId = paymentForm.entityId || '';
-      // Check if rawId is a transporter code, if so resolve to contractor name
-      const matchedTransporter = transporters.find(t => t.code === rawId || t.id === rawId);
+      const rawId = paymentForm.entityId || "";
+      const matchedTransporter = transporters.find((t) => t.code === rawId || t.id === rawId);
       if (matchedTransporter && matchedTransporter.contractor) {
         entityCode = matchedTransporter.contractor.trim();
       } else {
         entityCode = rawId;
       }
     }
-    
+
     const newPayment: Payment = {
       id: editingItem ? editingItem.id : `temp-${Date.now()}`,
-      date: paymentForm.date || '',
-      entityType: paymentForm.entityType || 'dredger',
+      date: paymentForm.date || "",
+      entityType: paymentForm.entityType || "dredger",
       entityId: entityCode,
       amount: paymentForm.amount || 0,
-      paymentMethod: paymentForm.paymentMethod || 'Bank Transfer',
+      paymentMethod: paymentForm.paymentMethod || "Bank Transfer",
       reference: paymentForm.reference || `PAY-${Date.now()}`,
-      notes: paymentForm.notes || ''
+      notes: paymentForm.notes || "",
     };
 
     if (editingItem) {
-      setPayments(prev => prev.map(p => p.id === editingItem.id ? newPayment : p));
+      setPayments((prev) => prev.map((p) => (p.id === editingItem.id ? newPayment : p)));
     } else {
-      setPayments(prev => [...prev, newPayment]);
+      setPayments((prev) => [...prev, newPayment]);
     }
 
-    const capitalizeFirst = (s: string) => s ? s.charAt(0).toUpperCase() + s.slice(1) : '';
+    const capitalizeFirst = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : "");
 
     const paymentData: any = {
       Date: paymentForm.date,
-      EntityType: capitalizeFirst(paymentForm.entityType || 'dredger'),
+      EntityType: capitalizeFirst(paymentForm.entityType || "dredger"),
       EntityCode: entityCode,
       Amount: paymentForm.amount,
-      PaymentMethod: paymentForm.paymentMethod || 'Bank Transfer',
+      PaymentMethod: paymentForm.paymentMethod || "Bank Transfer",
       Reference: paymentForm.reference || newPayment.reference,
-      Notes: paymentForm.notes || '',
+      Notes: paymentForm.notes || "",
     };
 
     setShowPaymentModal(false);
     setEditingItem(null);
     setPaymentForm({});
 
-    // If editing, delete old row first then add updated row
     if (editingItem) {
       const oldReference = editingItem.reference;
 
-      // Step 1: Send delete request for old payment
       try {
         await fetch(APPS_SCRIPT_URL, {
-          method: 'POST',
-          mode: 'no-cors',
-          headers: { 'Content-Type': 'text/plain' },
-          body: JSON.stringify({ action: 'deletePayment', data: { reference: oldReference } }),
+          method: "POST",
+          mode: "no-cors",
+          headers: { "Content-Type": "text/plain" },
+          body: JSON.stringify({ action: "deletePayment", data: { reference: oldReference } }),
         });
       } catch (err) {
-        console.warn('Delete request sent (no-cors):', err);
+        console.warn("Delete request sent (no-cors):", err);
       }
 
-      // Step 2: Wait for delete to process on Google Sheets side
-      await new Promise(resolve => setTimeout(resolve, 2500));
+      await new Promise((resolve) => setTimeout(resolve, 2500));
 
-      // Step 3: Now add the updated payment as new row
       try {
         await fetch(APPS_SCRIPT_URL, {
-          method: 'POST',
-          mode: 'no-cors',
-          headers: { 'Content-Type': 'text/plain' },
-          body: JSON.stringify({ action: 'savePayment', data: paymentData }),
+          method: "POST",
+          mode: "no-cors",
+          headers: { "Content-Type": "text/plain" },
+          body: JSON.stringify({ action: "savePayment", data: paymentData }),
         });
       } catch (err) {
-        console.warn('Save request sent (no-cors):', err);
+        console.warn("Save request sent (no-cors):", err);
       }
 
-      // Step 4: Reload data after save completes
       setTimeout(() => loadDataFromSheets(), 2500);
     } else {
-      submitToAppsScript('savePayment', paymentData, () => {}, true);
+      submitToAppsScript("savePayment", paymentData, () => {}, true);
     }
   };
 
-  const deleteItem = async (type: 'dredger' | 'transporter' | 'trip' | 'payment', id: string) => {
-    if (!confirm('Are you sure you want to delete this item? This will delete it from Google Sheets permanently.')) return;
-    
-    let actionData: any = {};
-    let actionName = '';
+  const deleteItem = async (type: "dredger" | "transporter" | "trip" | "payment", id: string) => {
+    if (!confirm("Are you sure you want to delete this item? This will delete it from Google Sheets permanently.")) return;
 
-    if (type === 'dredger') {
-      setDredgers(prev => prev.filter(d => d.id !== id));
-      actionName = 'deleteDredger';
-      actionData = { code: dredgers.find(d => d.id === id)?.code };
-    } else if (type === 'transporter') {
-      setTransporters(prev => prev.filter(t => t.id !== id));
-      actionName = 'deleteTransporter';
-      actionData = { code: transporters.find(t => t.id === id)?.code };
-    } else if (type === 'trip') {
-      const trip = trips.find(t => t.id === id);
-      setTrips(prev => prev.filter(t => t.id !== id));
-      actionName = 'deleteTrip';
-      actionData = { 
+    let actionData: any = {};
+    let actionName = "";
+
+    if (type === "dredger") {
+      setDredgers((prev) => prev.filter((d) => d.id !== id));
+      actionName = "deleteDredger";
+      actionData = { code: dredgers.find((d) => d.id === id)?.code };
+    } else if (type === "transporter") {
+      setTransporters((prev) => prev.filter((t) => t.id !== id));
+      actionName = "deleteTransporter";
+      actionData = { code: transporters.find((t) => t.id === id)?.code };
+    } else if (type === "trip") {
+      const trip = trips.find((t) => t.id === id);
+      setTrips((prev) => prev.filter((t) => t.id !== id));
+      actionName = "deleteTrip";
+      actionData = {
         date: trip?.date,
-        dredgerCode: dredgers.find(d => d.id === trip?.dredgerId)?.code
+        dredgerCode: dredgers.find((d) => d.id === trip?.dredgerId)?.code,
       };
-    } else if (type === 'payment') {
-      const payment = payments.find(p => p.id === id);
-      setPayments(prev => prev.filter(p => p.id !== id));
-      actionName = 'deletePayment';
-      actionData = { 
-        reference: payment?.reference
+    } else if (type === "payment") {
+      const payment = payments.find((p) => p.id === id);
+      setPayments((prev) => prev.filter((p) => p.id !== id));
+      actionName = "deletePayment";
+      actionData = {
+        reference: payment?.reference,
       };
     }
 
@@ -597,32 +681,34 @@ const DredgingDashboard: React.FC = () => {
   };
 
   const addTruck = async (transporterId: string) => {
-    const transporter = transporters.find(t => t.id === transporterId);
+    const transporter = transporters.find((t) => t.id === transporterId);
     if (!transporter) return;
-    
-    const truckName = prompt('Enter truck name (e.g., TP01, WHITE TRUCK):');
+
+    const truckName = prompt("Enter truck name (e.g., TP01, WHITE TRUCK):");
     if (!truckName) return;
-    const plateNumber = prompt('Enter truck plate number:');
+    const plateNumber = prompt("Enter truck plate number:");
     if (!plateNumber) return;
-    const capacityStr = prompt('Enter truck capacity (CBM):');
+    const capacityStr = prompt("Enter truck capacity (CBM):");
     if (!capacityStr) return;
     const capacity = parseFloat(capacityStr);
-    
+
     const newTruck: TruckRecord = {
       id: `temp-${Date.now()}`,
       truckName,
       plateNumber,
       capacityCbm: capacity,
       transporterId: transporter.id,
-      status: 'active'
+      status: "active",
     };
 
-    setTransporters(prev => prev.map(t => {
-      if (t.id === transporterId) {
-        return { ...t, trucks: [...t.trucks, newTruck] };
-      }
-      return t;
-    }));
+    setTransporters((prev) =>
+      prev.map((t) => {
+        if (t.id === transporterId) {
+          return { ...t, trucks: [...t.trucks, newTruck] };
+        }
+        return t;
+      })
+    );
 
     const truckData = {
       Code: transporter.code,
@@ -636,278 +722,281 @@ const DredgingDashboard: React.FC = () => {
       TruckName: truckName,
     };
 
-    submitToAppsScript('saveTransporter', truckData, () => {}, true);
+    submitToAppsScript("saveTransporter", truckData, () => {}, true);
   };
 
   const deleteTruck = async (transporterId: string, truckId: string) => {
-    if (!confirm('Are you sure you want to delete this truck? This will delete it from Google Sheets.')) return;
+    if (!confirm("Are you sure you want to delete this truck? This will delete it from Google Sheets.")) return;
 
-    const transporter = transporters.find(t => t.id === transporterId);
-    const truck = transporter?.trucks.find(tr => tr.id === truckId);
+    const transporter = transporters.find((t) => t.id === transporterId);
+    const truck = transporter?.trucks.find((tr) => tr.id === truckId);
 
     if (!transporter || !truck) return;
 
-    setTransporters(prev => prev.map(t => {
-      if (t.id === transporterId) {
-        return { ...t, trucks: t.trucks.filter(tr => tr.id !== truckId) };
-      }
-      return t;
-    }));
+    setTransporters((prev) =>
+      prev.map((t) => {
+        if (t.id === transporterId) {
+          return { ...t, trucks: t.trucks.filter((tr) => tr.id !== truckId) };
+        }
+        return t;
+      })
+    );
 
     const actionData = {
       Code: transporter.code,
-      PlateNumber: truck.plateNumber
+      PlateNumber: truck.plateNumber,
     };
 
-    submitToAppsScript('deleteTruck', actionData, () => {}, true);
+    submitToAppsScript("deleteTruck", actionData, () => {}, true);
   };
 
   // Download template
-  const downloadTemplate = (type: 'dredgers' | 'transporters' | 'trips' | 'payments') => {
-    let csv = '';
-    let filename = '';
-    
-    if (type === 'dredgers') {
-      csv = 'Code,Name,RatePerCbm,Status,Contractor,ContractNumber\n';
-      csv += 'DR-001,Dredger Alpha,1550,active,Marine Works Ltd,CNT-2024-001\n';
-      filename = 'dredgers_template.csv';
-    } else if (type === 'transporters') {
-      csv = 'Code,Name,RatePerCbm,Status,Contractor,ContractNumber,PlateNumber,CapacityCbm,TruckName\n';
-      csv += 'TR-001,Quick Haul Transport,850,active,Quick Haul Ltd,CNT-2024-101,ABC-123,15,Truck A\n';
-      csv += 'TR-001,Quick Haul Transport,850,active,Quick Haul Ltd,CNT-2024-101,ABC-124,18,Truck B\n';
-      filename = 'transporters_template.csv';
-    } else if (type === 'trips') {
-      csv = 'Date,DredgerCode,TransporterCode,PlateNumber,Trips,DredgerRate,TransporterRate,DumpingLocation,Notes\n';
-      csv += '2024-01-15,DR-001,TR-001,ABC-123,5,1500,850,Site A - North,\n';
-      csv += '2024-01-15,DR-001,TR-001,ABC-124,6,1500,850,Site A - South,\n';
-      csv += '2024-01-15,DR-002,TR-002,XYZ-456,10,1600,900,Site B - East,\n';
-      filename = 'trips_template.csv';
-    } else if (type === 'payments') {
-      csv = 'Date,EntityType,EntityId,Amount,PaymentMethod,Reference,Notes\n';
-      csv += '2024-01-10,dredger,1,5000000,Bank Transfer,PAY-2024-001,Advance payment\n';
-      filename = 'payments_template.csv';
+  const downloadTemplate = (type: "dredgers" | "transporters" | "trips" | "payments") => {
+    let csv = "";
+    let filename = "";
+
+    if (type === "dredgers") {
+      csv = "Code,Name,RatePerCbm,Status,Contractor,ContractNumber\n";
+      csv += "DR-001,Dredger Alpha,1550,active,Marine Works Ltd,CNT-2024-001\n";
+      filename = "dredgers_template.csv";
+    } else if (type === "transporters") {
+      csv = "Code,Name,RatePerCbm,Status,Contractor,ContractNumber,PlateNumber,CapacityCbm,TruckName\n";
+      csv += "TR-001,Quick Haul Transport,850,active,Quick Haul Ltd,CNT-2024-101,ABC-123,15,Truck A\n";
+      csv += "TR-001,Quick Haul Transport,850,active,Quick Haul Ltd,CNT-2024-101,ABC-124,18,Truck B\n";
+      filename = "transporters_template.csv";
+    } else if (type === "trips") {
+      csv = "Date,DredgerCode,TransporterCode,PlateNumber,Trips,DredgerRate,TransporterRate,DumpingLocation,Notes\n";
+      csv += "2024-01-15,DR-001,TR-001,ABC-123,5,1500,850,Site A - North,\n";
+      csv += "2024-01-15,DR-001,TR-001,ABC-124,6,1500,850,Site A - South,\n";
+      csv += "2024-01-15,DR-002,TR-002,XYZ-456,10,1600,900,Site B - East,\n";
+      filename = "trips_template.csv";
+    } else if (type === "payments") {
+      csv = "Date,EntityType,EntityId,Amount,PaymentMethod,Reference,Notes\n";
+      csv += "2024-01-10,dredger,1,5000000,Bank Transfer,PAY-2024-001,Advance payment\n";
+      filename = "payments_template.csv";
     }
-    
-    const blob = new Blob([csv], { type: 'text/csv' });
+
+    const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
+    const a = document.createElement("a");
     a.href = url;
     a.download = filename;
     a.click();
   };
 
-  // Import from Excel 
-  const handleFileImport = async (type: 'dredgers' | 'transporters' | 'trips' | 'payments', file: File) => {
+  // Import from Excel
+  const handleFileImport = async (
+    type: "dredgers" | "transporters" | "trips" | "payments",
+    file: File
+  ) => {
     const reader = new FileReader();
     reader.onload = async (e) => {
       try {
         const data = e.target?.result;
-        const workbook = XLSX.read(data, { type: 'binary' });
+        const workbook = XLSX.read(data, { type: "binary" });
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
         const jsonData: any[] = XLSX.utils.sheet_to_json(worksheet);
-        
+
         console.log(`Importing ${jsonData.length} rows for ${type}...`);
-        
+
         let count = 0;
         for (const row of jsonData) {
-           let action = '';
-           let payload: any = {};
-           
-           if (type === 'dredgers') {
-             action = 'saveDredger';
-             payload = {
-               Code: row.Code || row.code,
-               Name: row.Name || row.name,
-               RatePerCbm: row.RatePerCbm || row.ratePerCbm,
-               Status: row.Status || row.status || 'active',
-               Contractor: row.Contractor || row.contractor,
-               ContractNumber: row.ContractNumber || row.contractNumber
-             };
-           } else if (type === 'transporters') {
-             action = 'saveTransporter';
-             payload = {
-               Code: row.Code || row.code,
-               Name: row.Name || row.name,
-               RatePerCbm: row.RatePerCbm || row.ratePerCbm,
-               Status: row.Status || row.status || 'active',
-               Contractor: row.Contractor || row.contractor,
-               ContractNumber: row.ContractNumber || row.contractNumber,
-               PlateNumber: row.PlateNumber || row.plateNumber,
-               CapacityCbm: row.CapacityCbm || row.capacityCbm,
-               TruckName: row.TruckName || row['Truck Name'] || row.truckName
-             };
-           } else if (type === 'trips') {
-             action = 'saveTrip';
-             
-             const parseDate = (d: any) => {
-               if (!d) return new Date().toISOString().split('T')[0];
-               if (typeof d === 'string') {
-                 if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(d)) {
-                   const [day, month, year] = d.split('/');
-                   return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
-                 }
-                 return d; 
-               }
-               return d; 
-             };
+          let action = "";
+          let payload: any = {};
 
-             const tripDate = parseDate(row.Date || row.date);
-             const dredgerCode = row.DredgerCode || row.dredgerCode;
-             const transporterCode = row.TransporterCode || row.transporterCode;
-             const plateNumber = row.PlateNumber || row.plateNumber;
-             const tripsCount = parseInt(row.Trips || row.trips || 0);
-             const drRate = parseFloat(row.DredgerRate || row.dredgerRate || 0);
-             const trRate = parseFloat(row.TransporterRate || row.transporterRate || 0);
-             
-             let capacity = 0;
-             const transporter = transporters.find(t => t.code === transporterCode);
-             if (transporter) {
-               const truck = transporter.trucks.find((t: any) => t.plateNumber === plateNumber);
-               if (truck) capacity = truck.capacityCbm;
-             }
+          if (type === "dredgers") {
+            action = "saveDredger";
+            payload = {
+              Code: row.Code || row.code,
+              Name: row.Name || row.name,
+              RatePerCbm: row.RatePerCbm || row.ratePerCbm,
+              Status: row.Status || row.status || "active",
+              Contractor: row.Contractor || row.contractor,
+              ContractNumber: row.ContractNumber || row.contractNumber,
+            };
+          } else if (type === "transporters") {
+            action = "saveTransporter";
+            payload = {
+              Code: row.Code || row.code,
+              Name: row.Name || row.name,
+              RatePerCbm: row.RatePerCbm || row.ratePerCbm,
+              Status: row.Status || row.status || "active",
+              Contractor: row.Contractor || row.contractor,
+              ContractNumber: row.ContractNumber || row.contractNumber,
+              PlateNumber: row.PlateNumber || row.plateNumber,
+              CapacityCbm: row.CapacityCbm || row.capacityCbm,
+              TruckName: row.TruckName || row["Truck Name"] || row.truckName,
+            };
+          } else if (type === "trips") {
+            action = "saveTrip";
 
-             payload = {
-               Date: tripDate,
-               DredgerCode: dredgerCode,
-               TransporterCode: transporterCode,
-               PlateNumber: plateNumber,
-               Trips: tripsCount,
-               DredgerRate: drRate,
-               TransporterRate: trRate,
-               DumpingLocation: row.DumpingLocation || row.dumpingLocation || '',
-               Notes: row.Notes || row.notes || '',
-               DredgerAmount: tripsCount * capacity * drRate,
-               TransporterAmount: tripsCount * capacity * trRate
-             };
-           } else if (type === 'payments') {
-             action = 'savePayment';
-             const parseDate = (d: any) => {
-               if (!d) return new Date().toISOString().split('T')[0];
-               if (typeof d === 'string' && /^\d{1,2}\/\d{1,2}\/\d{4}$/.test(d)) {
-                 const [day, month, year] = d.split('/');
-                 return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
-               }
-               return d;
-             };
-             
-             const rawEntityType = (row.EntityType || row.entityType || 'dredger').toLowerCase();
-             payload = {
-               Date: parseDate(row.Date || row.date),
-               EntityType: rawEntityType.charAt(0).toUpperCase() + rawEntityType.slice(1),
-               EntityCode: row.EntityId || row.entityId || row.EntityCode || row.entityCode,
-               Amount: parseFloat(row.Amount || row.amount || 0),
-               PaymentMethod: row.PaymentMethod || row.paymentMethod || 'Bank Transfer',
-               Reference: row.Reference || row.reference || `PAY-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
-               Notes: row.Notes || row.notes || ''
-             };
-           }
-           
-           if (action) {
-             fetch(APPS_SCRIPT_URL, {
-                method: 'POST',
-                mode: 'no-cors',
-                headers: { 'Content-Type': 'text/plain' },
-                body: JSON.stringify({ action, data: payload })
-             });
-             count++;
-             await new Promise(r => setTimeout(r, 300));
-           }
+            const parseDate = (d: any) => {
+              if (!d) return new Date().toISOString().split("T")[0];
+              if (typeof d === "string") {
+                if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(d)) {
+                  const [day, month, year] = d.split("/");
+                  return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+                }
+                return d;
+              }
+              return d;
+            };
+
+            const tripDate = parseDate(row.Date || row.date);
+            const dredgerCode = row.DredgerCode || row.dredgerCode;
+            const transporterCode = row.TransporterCode || row.transporterCode;
+            const plateNumber = row.PlateNumber || row.plateNumber;
+            const tripsCount = parseInt(row.Trips || row.trips || 0);
+            const drRate = parseFloat(row.DredgerRate || row.dredgerRate || 0);
+            const trRate = parseFloat(row.TransporterRate || row.transporterRate || 0);
+
+            let capacity = 0;
+            const transporter = transporters.find((t) => t.code === transporterCode);
+            if (transporter) {
+              const truck = transporter.trucks.find((t: any) => t.plateNumber === plateNumber);
+              if (truck) capacity = truck.capacityCbm;
+            }
+
+            payload = {
+              Date: tripDate,
+              DredgerCode: dredgerCode,
+              TransporterCode: transporterCode,
+              PlateNumber: plateNumber,
+              Trips: tripsCount,
+              DredgerRate: drRate,
+              TransporterRate: trRate,
+              DumpingLocation: row.DumpingLocation || row.dumpingLocation || "",
+              Notes: row.Notes || row.notes || "",
+              DredgerAmount: tripsCount * capacity * drRate,
+              TransporterAmount: tripsCount * capacity * trRate,
+            };
+          } else if (type === "payments") {
+            action = "savePayment";
+            const parseDate = (d: any) => {
+              if (!d) return new Date().toISOString().split("T")[0];
+              if (typeof d === "string" && /^\d{1,2}\/\d{1,2}\/\d{4}$/.test(d)) {
+                const [day, month, year] = d.split("/");
+                return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+              }
+              return d;
+            };
+
+            const rawEntityType = (row.EntityType || row.entityType || "dredger").toLowerCase();
+            payload = {
+              Date: parseDate(row.Date || row.date),
+              EntityType: rawEntityType.charAt(0).toUpperCase() + rawEntityType.slice(1),
+              EntityCode: row.EntityId || row.entityId || row.EntityCode || row.entityCode,
+              Amount: parseFloat(row.Amount || row.amount || 0),
+              PaymentMethod: row.PaymentMethod || row.paymentMethod || "Bank Transfer",
+              Reference: row.Reference || row.reference || `PAY-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+              Notes: row.Notes || row.notes || "",
+            };
+          }
+
+          if (action) {
+            fetch(APPS_SCRIPT_URL, {
+              method: "POST",
+              mode: "no-cors",
+              headers: { "Content-Type": "text/plain" },
+              body: JSON.stringify({ action, data: payload }),
+            });
+            count++;
+            await new Promise((r) => setTimeout(r, 300));
+          }
         }
-        
+
         setTimeout(async () => {
           await loadDataFromSheets();
           alert(`Imported approx ${count} rows. Data reloading...`);
         }, 2000);
-
       } catch (error) {
-        alert('Error importing file: ' + error);
+        alert("Error importing file: " + error);
       }
     };
     reader.readAsBinaryString(file);
   };
 
   // Export to Excel (CSV format)
-  const exportToExcel = (type: 'trips' | 'dredgers' | 'transporters' | 'payments') => {
-    let csv = '';
-    let filename = '';
-    
-    if (type === 'trips') {
-      csv = 'Date,Dredger Code,Dredger,Transporter Code,Transporter,Plate Number,Trips,Capacity (CBM),Total Volume (CBM),Dredger Rate,Transporter Rate,Dredger Amount,Transporter Amount,Dumping Location,Notes\n';
-      trips.forEach(t => {
-        const dredger = dredgers.find(d => d.id === t.dredgerId);
-        const transporter = transporters.find(tr => tr.id === t.transporterId);
-        const dredgerAmount = t.totalVolume * (t.dredgerRate || 0);
-        const transporterAmount = t.totalVolume * (t.transporterRate || 0);
-        csv += `${t.date},${dredger?.code || ''},${dredger?.name || ''},${transporter?.code || ''},${transporter?.name || ''},${t.plateNumber},${t.trips},${t.capacityCbm},${t.totalVolume},${t.dredgerRate || 0},${t.transporterRate || 0},${dredgerAmount},${transporterAmount},${t.dumpingLocation},${t.notes}\n`;
+  const exportToExcel = (type: "trips" | "dredgers" | "transporters" | "payments") => {
+    let csv = "";
+    let filename = "";
+
+    if (type === "trips") {
+      csv =
+        "Date,Dredger Code,Dredger,Transporter Code,Transporter,Plate Number,Trips,Capacity (CBM),Total Volume (CBM),Dredger Rate,Transporter Rate,Dredger Amount,Transporter Amount,Dumping Location,Notes\n";
+      trips.forEach((t) => {
+        const dredger = dredgers.find((d) => d.id === t.dredgerId);
+        const transporter = transporters.find((tr) => tr.id === t.transporterId);
+        const dredgerAmount = Number.isFinite(t.dredgerAmount)
+          ? t.dredgerAmount
+          : t.totalVolume * (t.dredgerRate || 0);
+        const transporterAmount = Number.isFinite(t.transporterAmount)
+          ? t.transporterAmount
+          : t.totalVolume * (t.transporterRate || 0);
+        csv += `${t.date},${dredger?.code || ""},${dredger?.name || ""},${transporter?.code || ""},${transporter?.name || ""},${t.plateNumber},${t.trips},${t.capacityCbm},${t.totalVolume},${t.dredgerRate || 0},${t.transporterRate || 0},${dredgerAmount},${transporterAmount},${t.dumpingLocation},${t.notes}\n`;
       });
-      filename = 'trip_report.csv';
-    } else if (type === 'dredgers') {
-      csv = 'Code,Name,Rate (per CBM),Status,Contractor,Contract Number\n';
-      dredgers.forEach(d => {
+      filename = "trip_report.csv";
+    } else if (type === "dredgers") {
+      csv = "Code,Name,Rate (per CBM),Status,Contractor,Contract Number\n";
+      dredgers.forEach((d) => {
         csv += `${d.code},${d.name},${d.ratePerCbm},${d.status},${d.contractor},${d.contractNumber}\n`;
       });
-      filename = 'dredgers_report.csv';
-    } else if (type === 'transporters') {
-      csv = 'Code,Name,Rate (per CBM),Status,Contractor,Contract Number,Truck Plate,Capacity (CBM)\n';
-      transporters.forEach(t => {
-        t.trucks.forEach(truck => {
+      filename = "dredgers_report.csv";
+    } else if (type === "transporters") {
+      csv = "Code,Name,Rate (per CBM),Status,Contractor,Contract Number,Truck Plate,Capacity (CBM)\n";
+      transporters.forEach((t) => {
+        t.trucks.forEach((truck) => {
           csv += `${t.code},${t.name},${t.ratePerCbm},${t.status},${t.contractor},${t.contractNumber},${truck.plateNumber},${truck.capacityCbm}\n`;
         });
       });
-      filename = 'transporters_report.csv';
-    } else if (type === 'payments') {
-      csv = 'Date,Type,Entity,Amount,Payment Method,Reference,Notes\n';
-      payments.forEach(p => {
-        let entityName = '';
-        if (p.entityType === 'dredger') {
-             entityName = dredgers.find(d => d.id === p.entityId || d.code === p.entityId)?.name || p.entityId || '';
+      filename = "transporters_report.csv";
+    } else if (type === "payments") {
+      csv = "Date,Type,Entity,Amount,Payment Method,Reference,Notes\n";
+      payments.forEach((p) => {
+        let entityName = "";
+        if (p.entityType === "dredger") {
+          entityName = dredgers.find((d) => d.id === p.entityId || d.code === p.entityId)?.name || p.entityId || "";
         } else {
-             // Resolve transporter code to contractor name if needed
-             const matchedByCode = transporters.find(t => t.code === p.entityId || t.id === p.entityId);
-             entityName = (matchedByCode && matchedByCode.contractor) ? matchedByCode.contractor.trim() : (p.entityId || '');
+          const matchedByCode = transporters.find((t) => t.code === p.entityId || t.id === p.entityId);
+          entityName = matchedByCode && matchedByCode.contractor ? matchedByCode.contractor.trim() : p.entityId || "";
         }
         const displayType = p.entityType.charAt(0).toUpperCase() + p.entityType.slice(1);
         csv += `${p.date},${displayType},${entityName},${p.amount},${p.paymentMethod},${p.reference},${p.notes}\n`;
       });
-      filename = 'payments_report.csv';
+      filename = "payments_report.csv";
     }
-    
-    const blob = new Blob([csv], { type: 'text/csv' });
+
+    const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
+    const a = document.createElement("a");
     a.href = url;
     a.download = filename;
     a.click();
   };
 
   // Filter & sort trips
-  const filteredTrips = trips.filter(t => {
-    const lowerSearch = searchTerm.toLowerCase();
-    
-    // Safety check for transporter
-    const transporterName = transporters.find(tr => tr.id === t.transporterId)?.name.toLowerCase() || '';
-    
-    const haystack = 
-      t.plateNumber.toLowerCase() + 
-      ' ' + 
-      transporterName + 
-      ' ' + 
-      t.dumpingLocation.toLowerCase();
-      
-    const matchSearch = !lowerSearch || haystack.includes(lowerSearch);
-    
-    const isoDate = toSortableISO(t.date);
-    const afterStart = !dateFilter.start || isoDate >= toSortableISO(dateFilter.start);
-    const beforeEnd = !dateFilter.end || isoDate <= toSortableISO(dateFilter.end);
-    
-    return matchSearch && afterStart && beforeEnd;
-  }).sort((a, b) => {
-    // Newest first
-    const aIso = toSortableISO(a.date);
-    const bIso = toSortableISO(b.date);
-    return bIso.localeCompare(aIso);
-  });
+  const filteredTrips = trips
+    .filter((t) => {
+      const lowerSearch = searchTerm.toLowerCase();
+
+      const transporterName = transporters.find((tr) => tr.id === t.transporterId)?.name.toLowerCase() || "";
+
+      const haystack = t.plateNumber.toLowerCase() + " " + transporterName + " " + t.dumpingLocation.toLowerCase();
+
+      const matchSearch = !lowerSearch || haystack.includes(lowerSearch);
+
+      const isoDate = toSortableISO(t.date);
+      const afterStart = !dateFilter.start || isoDate >= toSortableISO(dateFilter.start);
+      const beforeEnd = !dateFilter.end || isoDate <= toSortableISO(dateFilter.end);
+
+      return matchSearch && afterStart && beforeEnd;
+    })
+    .sort((a, b) => {
+      const aIso = toSortableISO(a.date);
+      const bIso = toSortableISO(b.date);
+      return bIso.localeCompare(aIso);
+    });
 
   const formatCurrency = (amount: number) => `₦${amount.toLocaleString()}`;
 
@@ -921,10 +1010,9 @@ const DredgingDashboard: React.FC = () => {
               <Ship className="w-8 h-8" />
               <div>
                 <h1 className="text-2xl font-bold">Dredging Operations Dashboard</h1>
-                <p className="text-blue-200 text-sm">Sand Dredging & Haulage Management System</p>
+                <p className="text-blue-200 text-sm">Sand Dredging &amp; Haulage Management System</p>
               </div>
             </div>
-
           </div>
         </div>
       </header>
@@ -934,20 +1022,20 @@ const DredgingDashboard: React.FC = () => {
         <div className="max-w-7xl mx-auto px-4">
           <div className="flex space-x-1 overflow-x-auto">
             {[
-              { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
-              { id: 'dredgers', label: 'Dredgers', icon: Ship },
-              { id: 'transporters', label: 'Transporters', icon: Truck },
-              { id: 'trips', label: 'Daily Trips', icon: Calendar },
-              { id: 'payments', label: '₦ Payments', icon: Activity },
-              { id: 'reports', label: 'Reports', icon: FileSpreadsheet },
-            ].map(tab => (
+              { id: "dashboard", label: "Dashboard", icon: BarChart3 },
+              { id: "dredgers", label: "Dredgers", icon: Ship },
+              { id: "transporters", label: "Transporters", icon: Truck },
+              { id: "trips", label: "Daily Trips", icon: Calendar },
+              { id: "payments", label: "₦ Payments", icon: Activity },
+              { id: "reports", label: "Reports", icon: FileSpreadsheet },
+            ].map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id as any)}
                 className={`px-4 py-3 flex items-center space-x-2 border-b-2 transition-colors whitespace-nowrap ${
                   activeTab === tab.id
-                    ? 'border-blue-600 text-blue-600'
-                    : 'border-transparent text-gray-600 hover:text-gray-900'
+                    ? "border-blue-600 text-blue-600"
+                    : "border-transparent text-gray-600 hover:text-gray-900"
                 }`}
               >
                 <tab.icon className="w-5 h-5" />
@@ -961,38 +1049,36 @@ const DredgingDashboard: React.FC = () => {
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 py-6">
         {/* Dashboard Tab */}
-        {activeTab === 'dashboard' && (
+        {activeTab === "dashboard" && (
           <div className="space-y-6">
-            {/* Dashboard Date Filter */}
             <div className="bg-white p-4 rounded-lg shadow-sm flex flex-wrap items-center justify-between gap-4">
-               <h2 className="text-lg font-bold text-gray-700">Project Overview</h2>
-               <div className="flex items-center space-x-2">
-                  <span className="text-sm text-gray-600 font-medium">Filter Range:</span>
-                  <input
-                    type="date"
-                    value={dashboardDateFilter.start}
-                    onChange={(e) => setDashboardDateFilter({ ...dashboardDateFilter, start: e.target.value })}
-                    className="px-3 py-2 border rounded-lg text-sm"
-                  />
-                  <span className="text-gray-400">-</span>
-                  <input
-                    type="date"
-                    value={dashboardDateFilter.end}
-                    onChange={(e) => setDashboardDateFilter({ ...dashboardDateFilter, end: e.target.value })}
-                    className="px-3 py-2 border rounded-lg text-sm"
-                  />
-                  {(dashboardDateFilter.start || dashboardDateFilter.end) && (
-                    <button 
-                      onClick={() => setDashboardDateFilter({ start: '', end: '' })}
-                      className="text-sm text-red-600 hover:text-red-800 ml-2"
-                    >
-                      Clear
-                    </button>
-                  )}
-               </div>
+              <h2 className="text-lg font-bold text-gray-700">Project Overview</h2>
+              <div className="flex items-center space-x-2">
+                <span className="text-sm text-gray-600 font-medium">Filter Range:</span>
+                <input
+                  type="date"
+                  value={dashboardDateFilter.start}
+                  onChange={(e) => setDashboardDateFilter({ ...dashboardDateFilter, start: e.target.value })}
+                  className="px-3 py-2 border rounded-lg text-sm"
+                />
+                <span className="text-gray-400">-</span>
+                <input
+                  type="date"
+                  value={dashboardDateFilter.end}
+                  onChange={(e) => setDashboardDateFilter({ ...dashboardDateFilter, end: e.target.value })}
+                  className="px-3 py-2 border rounded-lg text-sm"
+                />
+                {(dashboardDateFilter.start || dashboardDateFilter.end) && (
+                  <button
+                    onClick={() => setDashboardDateFilter({ start: "", end: "" })}
+                    className="text-sm text-red-600 hover:text-red-800 ml-2"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
             </div>
 
-            {/* Stats Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
               <div className="bg-white rounded-lg shadow p-4">
                 <div className="flex items-center justify-between">
@@ -1051,13 +1137,13 @@ const DredgingDashboard: React.FC = () => {
               </div>
             </div>
 
-            {/* Quick Summary Tables */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Dredger Summary */}
               <div className="bg-white rounded-lg shadow">
                 <div className="p-4 border-b flex justify-between items-center">
                   <h3 className="font-bold text-lg">Dredger Summary</h3>
-                  <button onClick={() => setActiveTab('dredgers')} className="text-blue-600 hover:underline text-sm">View All</button>
+                  <button onClick={() => setActiveTab("dredgers")} className="text-blue-600 hover:underline text-sm">
+                    View All
+                  </button>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full">
@@ -1071,7 +1157,7 @@ const DredgingDashboard: React.FC = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {dredgers.map(dredger => {
+                      {dredgers.map((dredger) => {
                         const earnings = calculateDredgerEarnings(dredger.id, dashboardTrips, dashboardPayments);
                         return (
                           <tr key={dredger.id} className="border-t hover:bg-gray-50">
@@ -1082,7 +1168,11 @@ const DredgingDashboard: React.FC = () => {
                             <td className="px-4 py-3 text-right">{earnings.totalVolume.toLocaleString()}</td>
                             <td className="px-4 py-3 text-right">{formatCurrency(earnings.totalAmount)}</td>
                             <td className="px-4 py-3 text-right text-green-600">{formatCurrency(earnings.totalPaid)}</td>
-                            <td className={`px-4 py-3 text-right font-medium ${earnings.balance > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                            <td
+                              className={`px-4 py-3 text-right font-medium ${
+                                earnings.balance > 0 ? "text-red-600" : "text-green-600"
+                              }`}
+                            >
                               {formatCurrency(earnings.balance)}
                             </td>
                           </tr>
@@ -1093,7 +1183,12 @@ const DredgingDashboard: React.FC = () => {
                       <tr>
                         <td className="px-4 py-3 text-gray-800">Total Volume</td>
                         <td className="px-4 py-3 text-right text-blue-800">
-                          {dredgers.reduce((sum, d) => sum + calculateDredgerEarnings(d.id, dashboardTrips, dashboardPayments).totalVolume, 0).toLocaleString()}
+                          {dredgers
+                            .reduce(
+                              (sum, d) => sum + calculateDredgerEarnings(d.id, dashboardTrips, dashboardPayments).totalVolume,
+                              0
+                            )
+                            .toLocaleString()}
                         </td>
                         <td className="px-4 py-3 text-right"></td>
                         <td className="px-4 py-3 text-right"></td>
@@ -1104,11 +1199,12 @@ const DredgingDashboard: React.FC = () => {
                 </div>
               </div>
 
-              {/* Transporter Summary (Grouped by Contractor) */}
               <div className="bg-white rounded-lg shadow">
                 <div className="p-4 border-b flex justify-between items-center">
                   <h3 className="font-bold text-lg">Transporter Summary</h3>
-                  <button onClick={() => setActiveTab('transporters')} className="text-blue-600 hover:underline text-sm">View All</button>
+                  <button onClick={() => setActiveTab("transporters")} className="text-blue-600 hover:underline text-sm">
+                    View All
+                  </button>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full">
@@ -1123,32 +1219,33 @@ const DredgingDashboard: React.FC = () => {
                     </thead>
                     <tbody>
                       {(() => {
-                        // Normalize and Group Contractors
-                        const contractorGroups = new Map<string, { displayName: string, transporters: Transporter[] }>();
+                        const contractorGroups = new Map<string, { displayName: string; transporters: Transporter[] }>();
 
-                        transporters.forEach(t => {
-                           const rawName = t.contractor && t.contractor.trim() ? t.contractor : 'Unassigned';
-                           const key = rawName.trim().toLowerCase();
-                           
-                           if (!contractorGroups.has(key)) {
-                             contractorGroups.set(key, { displayName: rawName, transporters: [] });
-                           }
-                           contractorGroups.get(key)!.transporters.push(t);
+                        transporters.forEach((t) => {
+                          const rawName = t.contractor && t.contractor.trim() ? t.contractor : "Unassigned";
+                          const key = rawName.trim().toLowerCase();
+
+                          if (!contractorGroups.has(key)) {
+                            contractorGroups.set(key, { displayName: rawName, transporters: [] });
+                          }
+                          contractorGroups.get(key)!.transporters.push(t);
                         });
 
-                        return Array.from(contractorGroups.values()).map(group => {
+                        return Array.from(contractorGroups.values()).map((group) => {
                           const { displayName, transporters: groupTransporters } = group;
-                          
-                          // Sum up stats
-                          const stats = groupTransporters.reduce((acc, curr) => {
+
+                                              const stats = groupTransporters.reduce(
+                            (acc, curr) => {
                               const tStats = calculateTransporterEarnings(curr.id, dashboardTrips, dashboardPayments);
                               return {
-                                  trips: acc.trips + tStats.totalTrips,
-                                  volume: acc.volume + tStats.totalVolume,
-                                  amount: acc.amount + tStats.totalAmount,
-                                  balance: acc.balance + tStats.balance
+                                trips: acc.trips + tStats.totalTrips,
+                                volume: acc.volume + tStats.totalVolume,
+                                amount: acc.amount + tStats.totalAmount,
+                                balance: acc.balance + tStats.balance,
                               };
-                          }, { trips: 0, volume: 0, amount: 0, balance: 0 });
+                            },
+                            { trips: 0, volume: 0, amount: 0, balance: 0 }
+                          );
 
                           return (
                             <tr key={displayName} className="border-t hover:bg-gray-50">
@@ -1158,7 +1255,11 @@ const DredgingDashboard: React.FC = () => {
                               <td className="px-4 py-3 text-right">{stats.trips.toLocaleString()}</td>
                               <td className="px-4 py-3 text-right">{stats.volume.toLocaleString()}</td>
                               <td className="px-4 py-3 text-right">{formatCurrency(stats.amount)}</td>
-                              <td className={`px-4 py-3 text-right font-medium ${stats.balance > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                              <td
+                                className={`px-4 py-3 text-right font-medium ${
+                                  stats.balance > 0 ? "text-red-600" : "text-green-600"
+                                }`}
+                              >
                                 {formatCurrency(stats.balance)}
                               </td>
                             </tr>
@@ -1171,7 +1272,9 @@ const DredgingDashboard: React.FC = () => {
                         <td className="px-4 py-3 text-gray-800">Total Volume</td>
                         <td className="px-4 py-3 text-right"></td>
                         <td className="px-4 py-3 text-right text-blue-800">
-                          {transporters.reduce((sum, t) => sum + calculateTransporterEarnings(t.id, dashboardTrips, dashboardPayments).totalVolume, 0).toLocaleString()}
+                          {transporters
+                            .reduce((sum, t) => sum + calculateTransporterEarnings(t.id, dashboardTrips, dashboardPayments).totalVolume, 0)
+                            .toLocaleString()}
                         </td>
                         <td className="px-4 py-3 text-right"></td>
                         <td className="px-4 py-3 text-right"></td>
@@ -1182,11 +1285,12 @@ const DredgingDashboard: React.FC = () => {
               </div>
             </div>
 
-            {/* Recent Trips */}
             <div className="bg-white rounded-lg shadow">
               <div className="p-4 border-b flex justify-between items-center">
                 <h3 className="font-bold text-lg">Recent Trips</h3>
-                <button onClick={() => setActiveTab('trips')} className="text-blue-600 hover:underline text-sm">View All</button>
+                <button onClick={() => setActiveTab("trips")} className="text-blue-600 hover:underline text-sm">
+                  View All
+                </button>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full">
@@ -1202,9 +1306,9 @@ const DredgingDashboard: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {dashboardTrips.slice(-10).reverse().map(trip => {
-                      const dredger = dredgers.find(d => d.id === trip.dredgerId);
-                      const transporter = transporters.find(t => t.id === trip.transporterId);
+                    {dashboardTrips.slice(-10).reverse().map((trip) => {
+                      const dredger = dredgers.find((d) => d.id === trip.dredgerId);
+                      const transporter = transporters.find((t) => t.id === trip.transporterId);
                       return (
                         <tr key={trip.id} className="border-t hover:bg-gray-50">
                           <td className="px-4 py-3">{formatDisplayDate(trip.date)}</td>
@@ -1212,7 +1316,7 @@ const DredgingDashboard: React.FC = () => {
                           <td className="px-4 py-3">{transporter?.name}</td>
                           <td className="px-4 py-3 font-mono text-sm">{trip.plateNumber}</td>
                           <td className="px-4 py-3 text-right">{trip.trips}</td>
-                          <td className="px-4 py-3 text-right">{trip.totalVolume != null ? `${trip.totalVolume.toFixed(2)} CBM` : ''}</td>
+                          <td className="px-4 py-3 text-right">{trip.totalVolume != null ? `${trip.totalVolume.toFixed(2)} CBM` : ""}</td>
                           <td className="px-4 py-3">{trip.dumpingLocation}</td>
                         </tr>
                       );
@@ -1225,13 +1329,13 @@ const DredgingDashboard: React.FC = () => {
         )}
 
         {/* Dredgers Tab */}
-        {activeTab === 'dredgers' && (
+        {activeTab === "dredgers" && (
           <div className="space-y-4">
             <div className="flex justify-between items-center flex-wrap gap-2">
               <h2 className="text-2xl font-bold">Dredgers Management</h2>
               <div className="flex space-x-2">
                 <button
-                  onClick={() => downloadTemplate('dredgers')}
+                  onClick={() => downloadTemplate("dredgers")}
                   className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 flex items-center space-x-2"
                 >
                   <FileSpreadsheet className="w-5 h-5" />
@@ -1244,8 +1348,8 @@ const DredgingDashboard: React.FC = () => {
                   className="hidden"
                   onChange={(e) => {
                     const file = e.target.files?.[0];
-                    if (file) handleFileImport('dredgers', file);
-                    if (dredgerFileInput.current) dredgerFileInput.current.value = '';
+                    if (file) handleFileImport("dredgers", file);
+                    if (dredgerFileInput.current) dredgerFileInput.current.value = "";
                   }}
                 />
                 <button
@@ -1256,7 +1360,11 @@ const DredgingDashboard: React.FC = () => {
                   <span>Import Excel</span>
                 </button>
                 <button
-                  onClick={() => { setEditingItem(null); setDredgerForm({}); setShowDredgerModal(true); }}
+                  onClick={() => {
+                    setEditingItem(null);
+                    setDredgerForm({});
+                    setShowDredgerModal(true);
+                  }}
                   className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2"
                 >
                   <Plus className="w-5 h-5" />
@@ -1279,7 +1387,7 @@ const DredgingDashboard: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {dredgers.map(dredger => {
+                  {dredgers.map((dredger) => {
                     return (
                       <tr key={dredger.id} className="border-t hover:bg-gray-50">
                         <td className="px-4 py-3 font-mono">{dredger.code}</td>
@@ -1288,20 +1396,30 @@ const DredgingDashboard: React.FC = () => {
                         <td className="px-4 py-3">{dredger.contractor}</td>
                         <td className="px-4 py-3 font-mono text-sm">{dredger.contractNumber}</td>
                         <td className="px-4 py-3 text-center">
-                          <span className={`px-2 py-1 rounded text-xs font-medium ${dredger.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
+                          <span
+                            className={`px-2 py-1 rounded text-xs font-medium ${
+                              dredger.status === "active"
+                                ? "bg-green-100 text-green-800"
+                                : "bg-gray-100 text-gray-800"
+                            }`}
+                          >
                             {dredger.status}
                           </span>
                         </td>
                         <td className="px-4 py-3 text-right">
                           <div className="flex justify-end space-x-2">
                             <button
-                              onClick={() => { setEditingItem(dredger); setDredgerForm(dredger); setShowDredgerModal(true); }}
+                              onClick={() => {
+                                setEditingItem(dredger);
+                                setDredgerForm(dredger);
+                                setShowDredgerModal(true);
+                              }}
                               className="p-1 text-blue-600 hover:bg-blue-50 rounded"
                             >
                               <Edit className="w-4 h-4" />
                             </button>
                             <button
-                              onClick={() => deleteItem('dredger', dredger.id)}
+                              onClick={() => deleteItem("dredger", dredger.id)}
                               className="p-1 text-red-600 hover:bg-red-50 rounded"
                             >
                               <Trash2 className="w-4 h-4" />
@@ -1315,7 +1433,6 @@ const DredgingDashboard: React.FC = () => {
               </table>
             </div>
 
-            {/* Dredger Earnings Summary */}
             <div className="bg-white rounded-lg shadow p-4">
               <h3 className="font-bold text-lg mb-4">Dredger Earnings Summary</h3>
               <div className="overflow-x-auto">
@@ -1331,7 +1448,7 @@ const DredgingDashboard: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {dredgers.map(dredger => {
+                    {dredgers.map((dredger) => {
                       const earnings = calculateDredgerEarnings(dredger.id);
                       return (
                         <tr key={dredger.id} className="border-t">
@@ -1343,7 +1460,11 @@ const DredgingDashboard: React.FC = () => {
                           <td className="px-4 py-3 text-right">{formatCurrency(dredger.ratePerCbm)}</td>
                           <td className="px-4 py-3 text-right font-medium">{formatCurrency(earnings.totalAmount)}</td>
                           <td className="px-4 py-3 text-right text-green-600">{formatCurrency(earnings.totalPaid)}</td>
-                          <td className={`px-4 py-3 text-right font-bold ${earnings.balance > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                          <td
+                            className={`px-4 py-3 text-right font-bold ${
+                              earnings.balance > 0 ? "text-red-600" : "text-green-600"
+                            }`}
+                          >
                             {formatCurrency(earnings.balance)}
                           </td>
                         </tr>
@@ -1357,13 +1478,13 @@ const DredgingDashboard: React.FC = () => {
         )}
 
         {/* Transporters Tab */}
-        {activeTab === 'transporters' && (
+        {activeTab === "transporters" && (
           <div className="space-y-4">
             <div className="flex justify-between items-center flex-wrap gap-2">
               <h2 className="text-2xl font-bold">Transporters Management</h2>
               <div className="flex space-x-2">
                 <button
-                  onClick={() => downloadTemplate('transporters')}
+                  onClick={() => downloadTemplate("transporters")}
                   className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 flex items-center space-x-2"
                 >
                   <FileSpreadsheet className="w-5 h-5" />
@@ -1376,8 +1497,8 @@ const DredgingDashboard: React.FC = () => {
                   className="hidden"
                   onChange={(e) => {
                     const file = e.target.files?.[0];
-                    if (file) handleFileImport('transporters', file);
-                    if (transporterFileInput.current) transporterFileInput.current.value = '';
+                    if (file) handleFileImport("transporters", file);
+                    if (transporterFileInput.current) transporterFileInput.current.value = "";
                   }}
                 />
                 <button
@@ -1388,7 +1509,11 @@ const DredgingDashboard: React.FC = () => {
                   <span>Import Excel</span>
                 </button>
                 <button
-                  onClick={() => { setEditingItem(null); setTransporterForm({}); setShowTransporterModal(true); }}
+                  onClick={() => {
+                    setEditingItem(null);
+                    setTransporterForm({});
+                    setShowTransporterModal(true);
+                  }}
                   className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2"
                 >
                   <Plus className="w-5 h-5" />
@@ -1411,18 +1536,21 @@ const DredgingDashboard: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {transporters.map(transporter => (
+                  {transporters.map((transporter) => (
                     <tr key={transporter.id} className="border-t hover:bg-gray-50">
                       <td className="px-4 py-3 font-mono">{transporter.code}</td>
                       <td className="px-4 py-3 font-medium">{transporter.name}</td>
                       <td className="px-4 py-3 text-right">{formatCurrency(transporter.ratePerCbm)}</td>
                       <td className="px-4 py-3">
                         <div className="flex flex-wrap gap-1">
-                          {transporter.trucks.map(truck => (
+                          {transporter.trucks.map((truck) => (
                             <span key={truck.id} className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs font-mono">
-                               ({truck.truckName || 'Unnamed'} - {truck.plateNumber} - {truck.capacityCbm}CBM)
+                              ({truck.truckName || "Unnamed"} - {truck.plateNumber} - {truck.capacityCbm}CBM)
                               <button
-                                onClick={(e) => { e.stopPropagation(); deleteTruck(transporter.id, truck.id); }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  deleteTruck(transporter.id, truck.id);
+                                }}
                                 className="ml-1 text-red-600 hover:text-red-800"
                               >
                                 ×
@@ -1439,20 +1567,30 @@ const DredgingDashboard: React.FC = () => {
                       </td>
                       <td className="px-4 py-3">{transporter.contractor}</td>
                       <td className="px-4 py-3 text-center">
-                        <span className={`px-2 py-1 rounded text-xs font-medium ${transporter.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
+                        <span
+                          className={`px-2 py-1 rounded text-xs font-medium ${
+                            transporter.status === "active"
+                              ? "bg-green-100 text-green-800"
+                              : "bg-gray-100 text-gray-800"
+                          }`}
+                        >
                           {transporter.status}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex justify-end space-x-2">
                           <button
-                            onClick={() => { setEditingItem(transporter); setTransporterForm(transporter); setShowTransporterModal(true); }}
+                            onClick={() => {
+                              setEditingItem(transporter);
+                              setTransporterForm(transporter);
+                              setShowTransporterModal(true);
+                            }}
                             className="p-1 text-blue-600 hover:bg-blue-50 rounded"
                           >
                             <Edit className="w-4 h-4" />
                           </button>
                           <button
-                            onClick={() => deleteItem('transporter', transporter.id)}
+                            onClick={() => deleteItem("transporter", transporter.id)}
                             className="p-1 text-red-600 hover:bg-red-50 rounded"
                           >
                             <Trash2 className="w-4 h-4" />
@@ -1465,7 +1603,6 @@ const DredgingDashboard: React.FC = () => {
               </table>
             </div>
 
-            {/* Transporter Earnings Summary */}
             <div className="bg-white rounded-lg shadow p-4">
               <h3 className="font-bold text-lg mb-4">Transporter Earnings Summary</h3>
               <div className="overflow-x-auto">
@@ -1482,7 +1619,7 @@ const DredgingDashboard: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {transporters.map(transporter => {
+                    {transporters.map((transporter) => {
                       const earnings = calculateTransporterEarnings(transporter.id);
                       return (
                         <tr key={transporter.id} className="border-t">
@@ -1495,7 +1632,11 @@ const DredgingDashboard: React.FC = () => {
                           <td className="px-4 py-3 text-right">{formatCurrency(transporter.ratePerCbm)}</td>
                           <td className="px-4 py-3 text-right font-medium">{formatCurrency(earnings.totalAmount)}</td>
                           <td className="px-4 py-3 text-right text-green-600">{formatCurrency(earnings.totalPaid)}</td>
-                          <td className={`px-4 py-3 text-right font-bold ${earnings.balance > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                          <td
+                            className={`px-4 py-3 text-right font-bold ${
+                              earnings.balance > 0 ? "text-red-600" : "text-green-600"
+                            }`}
+                          >
                             {formatCurrency(earnings.balance)}
                           </td>
                         </tr>
@@ -1509,7 +1650,7 @@ const DredgingDashboard: React.FC = () => {
         )}
 
         {/* Trips Tab */}
-        {activeTab === 'trips' && (
+        {activeTab === "trips" && (
           <div className="space-y-4">
             <div className="flex justify-between items-center flex-wrap gap-4">
               <h2 className="text-2xl font-bold">Daily Trip Reports</h2>
@@ -1534,7 +1675,7 @@ const DredgingDashboard: React.FC = () => {
                   className="px-3 py-2 border rounded-lg"
                 />
                 <button
-                  onClick={() => downloadTemplate('trips')}
+                  onClick={() => downloadTemplate("trips")}
                   className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 flex items-center space-x-2"
                 >
                   <FileSpreadsheet className="w-5 h-5" />
@@ -1547,8 +1688,8 @@ const DredgingDashboard: React.FC = () => {
                   className="hidden"
                   onChange={(e) => {
                     const file = e.target.files?.[0];
-                    if (file) handleFileImport('trips', file);
-                    if (tripsFileInput.current) tripsFileInput.current.value = '';
+                    if (file) handleFileImport("trips", file);
+                    if (tripsFileInput.current) tripsFileInput.current.value = "";
                   }}
                 />
                 <button
@@ -1559,14 +1700,18 @@ const DredgingDashboard: React.FC = () => {
                   <span>Import</span>
                 </button>
                 <button
-                  onClick={() => { setEditingItem(null); setTripForm({ date: new Date().toISOString().split('T')[0] }); setShowTripModal(true); }}
+                  onClick={() => {
+                    setEditingItem(null);
+                    setTripForm({ date: new Date().toISOString().split("T")[0] });
+                    setShowTripModal(true);
+                  }}
                   className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2"
                 >
                   <Plus className="w-5 h-5" />
                   <span>Add Trip</span>
                 </button>
                 <button
-                  onClick={() => exportToExcel('trips')}
+                  onClick={() => exportToExcel("trips")}
                   className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center space-x-2"
                 >
                   <Download className="w-5 h-5" />
@@ -1591,13 +1736,13 @@ const DredgingDashboard: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredTrips.map(trip => {
-                    const dredger = dredgers.find(d => d.id === trip.dredgerId);
-                    const transporter = transporters.find(t => t.id === trip.transporterId);
-                    const truck = transporter?.trucks.find(tr => tr.id === trip.truckId || tr.plateNumber === trip.plateNumber);
-                    
+                  {filteredTrips.map((trip) => {
+                    const dredger = dredgers.find((d) => d.id === trip.dredgerId);
+                    const transporter = transporters.find((t) => t.id === trip.transporterId);
+                    const truck = transporter?.trucks.find((tr) => tr.id === trip.truckId || tr.plateNumber === trip.plateNumber);
+
                     const truckDisplay = truck
-                      ? `(${truck.plateNumber}${truck.truckName ? ' - ' + truck.truckName : ''})`
+                      ? `(${truck.plateNumber}${truck.truckName ? " - " + truck.truckName : ""})`
                       : trip.plateNumber;
 
                     const capacityCbm = trip.capacityCbm ?? truck?.capacityCbm ?? 0;
@@ -1610,19 +1755,23 @@ const DredgingDashboard: React.FC = () => {
                         <td className="px-4 py-3">{transporter?.name}</td>
                         <td className="px-4 py-3 font-mono text-sm">{truckDisplay}</td>
                         <td className="px-4 py-3 text-right">{trip.trips}</td>
-                        <td className="px-4 py-3 text-right">{capacityCbm ? `${capacityCbm.toFixed(2)} CBM` : ''}</td>
-                        <td className="px-4 py-3 text-right font-medium">{totalVolume ? `${totalVolume.toFixed(2)} CBM` : ''}</td>
+                        <td className="px-4 py-3 text-right">{capacityCbm ? `${capacityCbm.toFixed(2)} CBM` : ""}</td>
+                        <td className="px-4 py-3 text-right font-medium">{totalVolume ? `${totalVolume.toFixed(2)} CBM` : ""}</td>
                         <td className="px-4 py-3">{trip.dumpingLocation}</td>
                         <td className="px-4 py-3 text-right">
                           <div className="flex justify-end space-x-2">
                             <button
-                              onClick={() => { setEditingItem(trip); setTripForm(trip); setShowTripModal(true); }}
+                              onClick={() => {
+                                setEditingItem(trip);
+                                setTripForm(trip);
+                                setShowTripModal(true);
+                              }}
                               className="p-1 text-blue-600 hover:bg-blue-50 rounded"
                             >
                               <Edit className="w-4 h-4" />
                             </button>
                             <button
-                              onClick={() => deleteItem('trip', trip.id)}
+                              onClick={() => deleteItem("trip", trip.id)}
                               className="p-1 text-red-600 hover:bg-red-50 rounded"
                             >
                               <Trash2 className="w-4 h-4" />
@@ -1639,13 +1788,13 @@ const DredgingDashboard: React.FC = () => {
         )}
 
         {/* Payments Tab */}
-        {activeTab === 'payments' && (
+        {activeTab === "payments" && (
           <div className="space-y-4">
             <div className="flex justify-between items-center flex-wrap gap-2">
               <h2 className="text-2xl font-bold">Payments Register</h2>
               <div className="flex space-x-2">
                 <button
-                  onClick={() => downloadTemplate('payments')}
+                  onClick={() => downloadTemplate("payments")}
                   className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 flex items-center space-x-2"
                 >
                   <FileSpreadsheet className="w-5 h-5" />
@@ -1658,8 +1807,8 @@ const DredgingDashboard: React.FC = () => {
                   className="hidden"
                   onChange={(e) => {
                     const file = e.target.files?.[0];
-                    if (file) handleFileImport('payments', file);
-                    if (paymentsFileInput.current) paymentsFileInput.current.value = '';
+                    if (file) handleFileImport("payments", file);
+                    if (paymentsFileInput.current) paymentsFileInput.current.value = "";
                   }}
                 />
                 <button
@@ -1670,14 +1819,18 @@ const DredgingDashboard: React.FC = () => {
                   <span>Import</span>
                 </button>
                 <button
-                  onClick={() => { setEditingItem(null); setPaymentForm({ date: new Date().toISOString().split('T')[0], entityType: 'dredger' }); setShowPaymentModal(true); }}
+                  onClick={() => {
+                    setEditingItem(null);
+                    setPaymentForm({ date: new Date().toISOString().split("T")[0], entityType: "dredger" });
+                    setShowPaymentModal(true);
+                  }}
                   className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2"
                 >
                   <Plus className="w-5 h-5" />
                   <span>Add Payment</span>
                 </button>
                 <button
-                  onClick={() => exportToExcel('payments')}
+                  onClick={() => exportToExcel("payments")}
                   className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center space-x-2"
                 >
                   <Download className="w-5 h-5" />
@@ -1701,28 +1854,31 @@ const DredgingDashboard: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {payments.map(payment => {
-                    let entityName = '';
-                    if (payment.entityType === 'dredger') {
-                        const dr = dredgers.find(d => d.id === payment.entityId || d.code === payment.entityId);
-                        entityName = dr?.name || payment.entityId || '';
+                  {payments.map((payment) => {
+                    let entityName = "";
+                    if (payment.entityType === "dredger") {
+                      const dr = dredgers.find((d) => d.id === payment.entityId || d.code === payment.entityId);
+                      entityName = dr?.name || payment.entityId || "";
                     } else {
-                        // For transporters: entityId might be contractor name OR transporter code
-                        // Try to resolve transporter code to contractor name
-                        const matchedByCode = transporters.find(t => t.code === payment.entityId || t.id === payment.entityId);
-                        if (matchedByCode && matchedByCode.contractor) {
-                          entityName = matchedByCode.contractor.trim();
-                        } else {
-                          // Already a contractor name or unresolvable — show as-is
-                          entityName = payment.entityId || '';
-                        }
+                      const matchedByCode = transporters.find((t) => t.code === payment.entityId || t.id === payment.entityId);
+                      if (matchedByCode && matchedByCode.contractor) {
+                        entityName = matchedByCode.contractor.trim();
+                      } else {
+                        entityName = payment.entityId || "";
+                      }
                     }
 
                     return (
                       <tr key={payment.id} className="border-t hover:bg-gray-50">
                         <td className="px-4 py-3">{formatDisplayDate(payment.date)}</td>
                         <td className="px-4 py-3">
-                          <span className={`px-2 py-1 rounded text-xs font-medium ${payment.entityType === 'dredger' ? 'bg-orange-100 text-orange-800' : 'bg-purple-100 text-purple-800'}`}>
+                          <span
+                            className={`px-2 py-1 rounded text-xs font-medium ${
+                              payment.entityType === "dredger"
+                                ? "bg-orange-100 text-orange-800"
+                                : "bg-purple-100 text-purple-800"
+                            }`}
+                          >
                             {payment.entityType.charAt(0).toUpperCase() + payment.entityType.slice(1)}
                           </span>
                         </td>
@@ -1734,13 +1890,17 @@ const DredgingDashboard: React.FC = () => {
                         <td className="px-4 py-3 text-right">
                           <div className="flex justify-end space-x-2">
                             <button
-                              onClick={() => { setEditingItem(payment); setPaymentForm(payment); setShowPaymentModal(true); }}
+                              onClick={() => {
+                                setEditingItem(payment);
+                                setPaymentForm(payment);
+                                setShowPaymentModal(true);
+                              }}
                               className="p-1 text-blue-600 hover:bg-blue-50 rounded"
                             >
                               <Edit className="w-4 h-4" />
                             </button>
                             <button
-                              onClick={() => deleteItem('payment', payment.id)}
+                              onClick={() => deleteItem("payment", payment.id)}
                               className="p-1 text-red-600 hover:bg-red-50 rounded"
                             >
                               <Trash2 className="w-4 h-4" />
@@ -1757,31 +1917,41 @@ const DredgingDashboard: React.FC = () => {
         )}
 
         {/* Reports Tab */}
-        {activeTab === 'reports' && (
+        {activeTab === "reports" && (
           <div className="space-y-6">
             <h2 className="text-2xl font-bold">Comprehensive Reports</h2>
-            
-            {/* Export All Reports */}
+
             <div className="flex space-x-2 flex-wrap gap-2">
-              <button onClick={() => exportToExcel('trips')} className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center space-x-2">
+              <button
+                onClick={() => exportToExcel("trips")}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center space-x-2"
+              >
                 <Download className="w-5 h-5" />
                 <span>Export Trips</span>
               </button>
-              <button onClick={() => exportToExcel('dredgers')} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2">
+              <button
+                onClick={() => exportToExcel("dredgers")}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2"
+              >
                 <Download className="w-5 h-5" />
                 <span>Export Dredgers</span>
               </button>
-              <button onClick={() => exportToExcel('transporters')} className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center space-x-2">
+              <button
+                onClick={() => exportToExcel("transporters")}
+                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center space-x-2"
+              >
                 <Download className="w-5 h-5" />
                 <span>Export Transporters</span>
               </button>
-              <button onClick={() => exportToExcel('payments')} className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 flex items-center space-x-2">
+              <button
+                onClick={() => exportToExcel("payments")}
+                className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 flex items-center space-x-2"
+              >
                 <Download className="w-5 h-5" />
                 <span>Export Payments</span>
               </button>
             </div>
 
-            {/* Overall Summary Report */}
             <div className="bg-white rounded-lg shadow p-6">
               <h3 className="font-bold text-xl mb-4 flex items-center space-x-2">
                 <FileSpreadsheet className="w-6 h-6" />
@@ -1809,7 +1979,9 @@ const DredgingDashboard: React.FC = () => {
                 <div className="flex justify-between items-center">
                   <div>
                     <p className="text-sm text-gray-600">Total Project Cost</p>
-                    <p className="text-2xl font-bold text-gray-800">{formatCurrency(overallStats.totalDredgerCost + overallStats.totalTransporterCost)}</p>
+                    <p className="text-2xl font-bold text-gray-800">
+                      {formatCurrency(overallStats.totalDredgerCost + overallStats.totalTransporterCost)}
+                    </p>
                   </div>
                   <div>
                     <p className="text-sm text-gray-600">Total Payments Made</p>
@@ -1825,7 +1997,6 @@ const DredgingDashboard: React.FC = () => {
               </div>
             </div>
 
-            {/* Dredger Detailed Report */}
             <div className="bg-white rounded-lg shadow p-6">
               <h3 className="font-bold text-xl mb-4">Dredger Performance Report</h3>
               <div className="overflow-x-auto">
@@ -1843,7 +2014,7 @@ const DredgingDashboard: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {dredgers.map(dredger => {
+                    {dredgers.map((dredger) => {
                       const earnings = calculateDredgerEarnings(dredger.id);
                       return (
                         <tr key={dredger.id} className="border-t hover:bg-gray-50">
@@ -1856,7 +2027,11 @@ const DredgingDashboard: React.FC = () => {
                           <td className="px-4 py-3 text-right">{earnings.totalVolume.toLocaleString()} CBM</td>
                           <td className="px-4 py-3 text-right font-medium">{formatCurrency(earnings.totalAmount)}</td>
                           <td className="px-4 py-3 text-right text-green-600">{formatCurrency(earnings.totalPaid)}</td>
-                          <td className={`px-4 py-3 text-right font-bold ${earnings.balance > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                          <td
+                            className={`px-4 py-3 text-right font-bold ${
+                              earnings.balance > 0 ? "text-red-600" : "text-green-600"
+                            }`}
+                          >
                             {formatCurrency(earnings.balance)}
                           </td>
                           <td className="px-4 py-3 text-center">
@@ -1874,7 +2049,6 @@ const DredgingDashboard: React.FC = () => {
               </div>
             </div>
 
-            {/* Transporter Detailed Report */}
             <div className="bg-white rounded-lg shadow p-6">
               <h3 className="font-bold text-xl mb-4">Transporter Performance Report</h3>
               <div className="overflow-x-auto">
@@ -1892,33 +2066,36 @@ const DredgingDashboard: React.FC = () => {
                   </thead>
                   <tbody>
                     {(() => {
-                      const contractorGroups = new Map<string, { displayName: string, transporters: Transporter[] }>();
-                      transporters.forEach(t => {
-                         const rawName = t.contractor && t.contractor.trim() ? t.contractor : 'Unassigned';
-                         const key = rawName.trim().toLowerCase();
-                         if (!contractorGroups.has(key)) contractorGroups.set(key, { displayName: rawName, transporters: [] });
-                         contractorGroups.get(key)!.transporters.push(t);
+                      const contractorGroups = new Map<string, { displayName: string; transporters: Transporter[] }>();
+                      transporters.forEach((t) => {
+                        const rawName = t.contractor && t.contractor.trim() ? t.contractor : "Unassigned";
+                        const key = rawName.trim().toLowerCase();
+                        if (!contractorGroups.has(key)) contractorGroups.set(key, { displayName: rawName, transporters: [] });
+                        contractorGroups.get(key)!.transporters.push(t);
                       });
 
-                      return Array.from(contractorGroups.values()).map(group => {
+                      return Array.from(contractorGroups.values()).map((group) => {
                         const { displayName, transporters: groupTransporters } = group;
-                        
-                        const opStats = groupTransporters.reduce((acc, curr) => {
-                            const tStats = calculateTransporterEarnings(curr.id); 
+
+                        const opStats = groupTransporters.reduce(
+                          (acc, curr) => {
+                            const tStats = calculateTransporterEarnings(curr.id);
                             return {
-                                trips: acc.trips + tStats.totalTrips,
-                                volume: acc.volume + tStats.totalVolume,
-                                amount: acc.amount + tStats.totalAmount
+                              trips: acc.trips + tStats.totalTrips,
+                              volume: acc.volume + tStats.totalVolume,
+                              amount: acc.amount + tStats.totalAmount,
                             };
-                        }, { trips: 0, volume: 0, amount: 0 });
+                          },
+                          { trips: 0, volume: 0, amount: 0 }
+                        );
 
-                        const contractorDirectPayments = payments.filter(p => 
-                           p.entityType === 'transporter' && p.entityId === displayName
-                        ).reduce((sum, p) => sum + p.amount, 0);
+                        const contractorDirectPayments = payments
+                          .filter((p) => p.entityType === "transporter" && p.entityId === displayName)
+                          .reduce((sum, p) => sum + p.amount, 0);
 
-                        const legacyPayments = payments.filter(p => 
-                           p.entityType === 'transporter' && groupTransporters.some(t => t.id === p.entityId)
-                        ).reduce((sum, p) => sum + p.amount, 0);
+                        const legacyPayments = payments
+                          .filter((p) => p.entityType === "transporter" && groupTransporters.some((t) => t.id === p.entityId))
+                          .reduce((sum, p) => sum + p.amount, 0);
 
                         const totalPaid = contractorDirectPayments + legacyPayments;
                         const balance = opStats.amount - totalPaid;
@@ -1930,7 +2107,9 @@ const DredgingDashboard: React.FC = () => {
                             <td className="px-4 py-3 text-right">{opStats.volume.toLocaleString()} CBM</td>
                             <td className="px-4 py-3 text-right font-medium">{formatCurrency(opStats.amount)}</td>
                             <td className="px-4 py-3 text-right text-green-600">{formatCurrency(totalPaid)}</td>
-                            <td className={`px-4 py-3 text-right font-bold ${balance > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                            <td
+                              className={`px-4 py-3 text-right font-bold ${balance > 0 ? "text-red-600" : "text-green-600"}`}
+                            >
                               {formatCurrency(balance)}
                             </td>
                             <td className="px-4 py-3 text-center">
@@ -1949,7 +2128,6 @@ const DredgingDashboard: React.FC = () => {
               </div>
             </div>
 
-            {/* Accounting Summary */}
             <div className="bg-white rounded-lg shadow p-6">
               <h3 className="font-bold text-xl mb-4 flex items-center space-x-2">
                 <span className="text-2xl font-bold">₦</span>
@@ -1959,7 +2137,7 @@ const DredgingDashboard: React.FC = () => {
                 <div>
                   <h4 className="font-semibold mb-3">Dredger Payments</h4>
                   <div className="space-y-2">
-                    {dredgers.map(dredger => {
+                    {dredgers.map((dredger) => {
                       const earnings = calculateDredgerEarnings(dredger.id);
                       return (
                         <div key={dredger.id} className="flex justify-between items-center p-3 bg-gray-50 rounded">
@@ -1970,7 +2148,7 @@ const DredgingDashboard: React.FC = () => {
                           <div className="text-right">
                             <div className="text-sm text-gray-600">Due: {formatCurrency(earnings.totalAmount)}</div>
                             <div className="text-sm text-green-600">Paid: {formatCurrency(earnings.totalPaid)}</div>
-                            <div className={`font-bold ${earnings.balance > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                            <div className={`font-bold ${earnings.balance > 0 ? "text-red-600" : "text-green-600"}`}>
                               Balance: {formatCurrency(earnings.balance)}
                             </div>
                           </div>
@@ -1983,29 +2161,32 @@ const DredgingDashboard: React.FC = () => {
                   <h4 className="font-semibold mb-3">Transporter Payments (By Contractor)</h4>
                   <div className="space-y-2">
                     {(() => {
-                      const contractorGroups = new Map<string, { displayName: string, transporters: Transporter[] }>();
-                      transporters.forEach(t => {
-                         const rawName = t.contractor && t.contractor.trim() ? t.contractor : 'Unassigned';
-                         const key = rawName.trim().toLowerCase();
-                         if (!contractorGroups.has(key)) contractorGroups.set(key, { displayName: rawName, transporters: [] });
-                         contractorGroups.get(key)!.transporters.push(t);
+                      const contractorGroups = new Map<string, { displayName: string; transporters: Transporter[] }>();
+                      transporters.forEach((t) => {
+                        const rawName = t.contractor && t.contractor.trim() ? t.contractor : "Unassigned";
+                        const key = rawName.trim().toLowerCase();
+                        if (!contractorGroups.has(key)) contractorGroups.set(key, { displayName: rawName, transporters: [] });
+                        contractorGroups.get(key)!.transporters.push(t);
                       });
 
-                      return Array.from(contractorGroups.values()).map(group => {
+                      return Array.from(contractorGroups.values()).map((group) => {
                         const { displayName, transporters: groupTransporters } = group;
-                        
-                        const opStats = groupTransporters.reduce((acc, curr) => {
-                            const tStats = calculateTransporterEarnings(curr.id); 
+
+                        const opStats = groupTransporters.reduce(
+                          (acc, curr) => {
+                            const tStats = calculateTransporterEarnings(curr.id);
                             return { amount: acc.amount + tStats.totalAmount };
-                        }, { amount: 0 });
+                          },
+                          { amount: 0 }
+                        );
 
-                        const contractorDirectPayments = payments.filter(p => 
-                           p.entityType === 'transporter' && p.entityId === displayName
-                        ).reduce((sum, p) => sum + p.amount, 0);
+                        const contractorDirectPayments = payments
+                          .filter((p) => p.entityType === "transporter" && p.entityId === displayName)
+                          .reduce((sum, p) => sum + p.amount, 0);
 
-                        const legacyPayments = payments.filter(p => 
-                           p.entityType === 'transporter' && groupTransporters.some(t => t.id === p.entityId)
-                        ).reduce((sum, p) => sum + p.amount, 0);
+                        const legacyPayments = payments
+                          .filter((p) => p.entityType === "transporter" && groupTransporters.some((t) => t.id === p.entityId))
+                          .reduce((sum, p) => sum + p.amount, 0);
 
                         const totalPaid = contractorDirectPayments + legacyPayments;
                         const balance = opStats.amount - totalPaid;
@@ -2019,7 +2200,7 @@ const DredgingDashboard: React.FC = () => {
                             <div className="text-right">
                               <div className="text-sm text-gray-600">Due: {formatCurrency(opStats.amount)}</div>
                               <div className="text-sm text-green-600">Paid: {formatCurrency(totalPaid)}</div>
-                              <div className={`font-bold ${balance > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                              <div className={`font-bold ${balance > 0 ? "text-red-600" : "text-green-600"}`}>
                                 Balance: {formatCurrency(balance)}
                               </div>
                             </div>
@@ -2035,17 +2216,16 @@ const DredgingDashboard: React.FC = () => {
         )}
       </main>
 
-      {/* Dredger Modal */}
       {showDredgerModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-md">
-            <h3 className="text-xl font-bold mb-4">{editingItem ? 'Edit' : 'Add'} Dredger</h3>
+            <h3 className="text-xl font-bold mb-4">{editingItem ? "Edit" : "Add"} Dredger</h3>
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700">Code</label>
                 <input
                   type="text"
-                  value={dredgerForm.code || ''}
+                  value={dredgerForm.code || ""}
                   onChange={(e) => setDredgerForm({ ...dredgerForm, code: e.target.value })}
                   className="w-full px-3 py-2 border rounded-lg"
                   placeholder="DR-001"
@@ -2055,7 +2235,7 @@ const DredgingDashboard: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700">Name</label>
                 <input
                   type="text"
-                  value={dredgerForm.name || ''}
+                  value={dredgerForm.name || ""}
                   onChange={(e) => setDredgerForm({ ...dredgerForm, name: e.target.value })}
                   className="w-full px-3 py-2 border rounded-lg"
                   placeholder="Dredger Name"
@@ -2066,7 +2246,7 @@ const DredgingDashboard: React.FC = () => {
                 <input
                   type="number"
                   step="0.01"
-                  value={dredgerForm.ratePerCbm || ''}
+                  value={dredgerForm.ratePerCbm || ""}
                   onChange={(e) => setDredgerForm({ ...dredgerForm, ratePerCbm: parseFloat(e.target.value) })}
                   className="w-full px-3 py-2 border rounded-lg"
                   placeholder="0.00"
@@ -2076,7 +2256,7 @@ const DredgingDashboard: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700">Contractor</label>
                 <input
                   type="text"
-                  value={dredgerForm.contractor || ''}
+                  value={dredgerForm.contractor || ""}
                   onChange={(e) => setDredgerForm({ ...dredgerForm, contractor: e.target.value })}
                   className="w-full px-3 py-2 border rounded-lg"
                   placeholder="Contractor Name"
@@ -2086,7 +2266,7 @@ const DredgingDashboard: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700">Contract Number</label>
                 <input
                   type="text"
-                  value={dredgerForm.contractNumber || ''}
+                  value={dredgerForm.contractNumber || ""}
                   onChange={(e) => setDredgerForm({ ...dredgerForm, contractNumber: e.target.value })}
                   className="w-full px-3 py-2 border rounded-lg"
                   placeholder="CNT-2024-XXX"
@@ -2095,8 +2275,8 @@ const DredgingDashboard: React.FC = () => {
               <div>
                 <label className="block text-sm font-medium text-gray-700">Status</label>
                 <select
-                  value={dredgerForm.status || 'active'}
-                  onChange={(e) => setDredgerForm({ ...dredgerForm, status: e.target.value as 'active' | 'inactive' })}
+                  value={dredgerForm.status || "active"}
+                  onChange={(e) => setDredgerForm({ ...dredgerForm, status: e.target.value as "active" | "inactive" })}
                   className="w-full px-3 py-2 border rounded-lg"
                 >
                   <option value="active">Active</option>
@@ -2105,10 +2285,22 @@ const DredgingDashboard: React.FC = () => {
               </div>
             </div>
             <div className="flex justify-end space-x-2 mt-6">
-              <button type="button" onClick={() => { setShowDredgerModal(false); setEditingItem(null); setDredgerForm({}); }} className="px-4 py-2 border rounded-lg hover:bg-gray-50">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowDredgerModal(false);
+                  setEditingItem(null);
+                  setDredgerForm({});
+                }}
+                className="px-4 py-2 border rounded-lg hover:bg-gray-50"
+              >
                 Cancel
               </button>
-              <button type="button" onClick={() => saveDredger()} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+              <button
+                type="button"
+                onClick={() => saveDredger()}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
                 Save
               </button>
             </div>
@@ -2116,17 +2308,16 @@ const DredgingDashboard: React.FC = () => {
         </div>
       )}
 
-      {/* Transporter Modal */}
       {showTransporterModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-md">
-            <h3 className="text-xl font-bold mb-4">{editingItem ? 'Edit' : 'Add'} Transporter</h3>
+            <h3 className="text-xl font-bold mb-4">{editingItem ? "Edit" : "Add"} Transporter</h3>
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700">Code</label>
                 <input
                   type="text"
-                  value={transporterForm.code || ''}
+                  value={transporterForm.code || ""}
                   onChange={(e) => setTransporterForm({ ...transporterForm, code: e.target.value })}
                   className="w-full px-3 py-2 border rounded-lg"
                   placeholder="TR-001"
@@ -2136,7 +2327,7 @@ const DredgingDashboard: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700">Name</label>
                 <input
                   type="text"
-                  value={transporterForm.name || ''}
+                  value={transporterForm.name || ""}
                   onChange={(e) => setTransporterForm({ ...transporterForm, name: e.target.value })}
                   className="w-full px-3 py-2 border rounded-lg"
                   placeholder="Transporter Name"
@@ -2147,7 +2338,7 @@ const DredgingDashboard: React.FC = () => {
                 <input
                   type="number"
                   step="0.01"
-                  value={transporterForm.ratePerCbm || ''}
+                  value={transporterForm.ratePerCbm || ""}
                   onChange={(e) => setTransporterForm({ ...transporterForm, ratePerCbm: parseFloat(e.target.value) })}
                   className="w-full px-3 py-2 border rounded-lg"
                   placeholder="0.00"
@@ -2157,7 +2348,7 @@ const DredgingDashboard: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700">Contractor</label>
                 <input
                   type="text"
-                  value={transporterForm.contractor || ''}
+                  value={transporterForm.contractor || ""}
                   onChange={(e) => setTransporterForm({ ...transporterForm, contractor: e.target.value })}
                   className="w-full px-3 py-2 border rounded-lg"
                   placeholder="Contractor Name"
@@ -2167,7 +2358,7 @@ const DredgingDashboard: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700">Contract Number</label>
                 <input
                   type="text"
-                  value={transporterForm.contractNumber || ''}
+                  value={transporterForm.contractNumber || ""}
                   onChange={(e) => setTransporterForm({ ...transporterForm, contractNumber: e.target.value })}
                   className="w-full px-3 py-2 border rounded-lg"
                   placeholder="CNT-2024-XXX"
@@ -2176,8 +2367,8 @@ const DredgingDashboard: React.FC = () => {
               <div>
                 <label className="block text-sm font-medium text-gray-700">Status</label>
                 <select
-                  value={transporterForm.status || 'active'}
-                  onChange={(e) => setTransporterForm({ ...transporterForm, status: e.target.value as 'active' | 'inactive' })}
+                  value={transporterForm.status || "active"}
+                  onChange={(e) => setTransporterForm({ ...transporterForm, status: e.target.value as "active" | "inactive" })}
                   className="w-full px-3 py-2 border rounded-lg"
                 >
                   <option value="active">Active</option>
@@ -2186,10 +2377,22 @@ const DredgingDashboard: React.FC = () => {
               </div>
             </div>
             <div className="flex justify-end space-x-2 mt-6">
-              <button type="button" onClick={() => { setShowTransporterModal(false); setEditingItem(null); setTransporterForm({}); }} className="px-4 py-2 border rounded-lg hover:bg-gray-50">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowTransporterModal(false);
+                  setEditingItem(null);
+                  setTransporterForm({});
+                }}
+                className="px-4 py-2 border rounded-lg hover:bg-gray-50"
+              >
                 Cancel
               </button>
-              <button type="button" onClick={() => saveTransporter()} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+              <button
+                type="button"
+                onClick={() => saveTransporter()}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
                 Save
               </button>
             </div>
@@ -2197,17 +2400,16 @@ const DredgingDashboard: React.FC = () => {
         </div>
       )}
 
-      {/* Trip Modal */}
       {showTripModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-lg">
-            <h3 className="text-xl font-bold mb-4">{editingItem ? 'Edit' : 'Add'} Trip Report</h3>
+            <h3 className="text-xl font-bold mb-4">{editingItem ? "Edit" : "Add"} Trip Report</h3>
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700">Date</label>
                 <input
                   type="date"
-                  value={tripForm.date || ''}
+                  value={tripForm.date || ""}
                   onChange={(e) => setTripForm({ ...tripForm, date: e.target.value })}
                   className="w-full px-3 py-2 border rounded-lg"
                 />
@@ -2216,36 +2418,44 @@ const DredgingDashboard: React.FC = () => {
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Dredger</label>
                   <select
-                    value={tripForm.dredgerId || ''}
+                    value={tripForm.dredgerId || ""}
                     onChange={(e) => setTripForm({ ...tripForm, dredgerId: e.target.value })}
                     className="w-full px-3 py-2 border rounded-lg"
                   >
                     <option value="">Select Dredger</option>
-                    {dredgers.filter(d => d.status === 'active').map(d => (
-                      <option key={d.id} value={d.id}>{d.name}</option>
-                    ))}
+                    {dredgers
+                      .filter((d) => d.status === "active")
+                      .map((d) => (
+                        <option key={d.id} value={d.id}>
+                          {d.name}
+                        </option>
+                      ))}
                   </select>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Transporter</label>
                   <select
-                    value={tripForm.transporterId || ''}
+                    value={tripForm.transporterId || ""}
                     onChange={(e) => {
-                      setTripForm({ ...tripForm, transporterId: e.target.value, truckId: '' });
+                      setTripForm({ ...tripForm, transporterId: e.target.value, truckId: "" });
                     }}
                     className="w-full px-3 py-2 border rounded-lg"
                   >
                     <option value="">Select Transporter</option>
-                    {transporters.filter(t => t.status === 'active').map(t => (
-                      <option key={t.id} value={t.id}>{t.name}</option>
-                    ))}
+                    {transporters
+                      .filter((t) => t.status === "active")
+                      .map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.name}
+                        </option>
+                      ))}
                   </select>
                 </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">Truck</label>
                 <select
-                  value={tripForm.truckId || ''}
+                  value={tripForm.truckId || ""}
                   onChange={(e) => {
                     setTripForm({ ...tripForm, truckId: e.target.value });
                   }}
@@ -2254,11 +2464,11 @@ const DredgingDashboard: React.FC = () => {
                 >
                   <option value="">Select Truck</option>
                   {transporters
-                    .find(t => t.id === tripForm.transporterId)
-                    ?.trucks.filter(tr => tr.status === 'active')
-                    .map(truck => (
+                    .find((t) => t.id === tripForm.transporterId)
+                    ?.trucks.filter((tr) => tr.status === "active")
+                    .map((truck) => (
                       <option key={truck.id} value={truck.id}>
-                       {truck.truckName} ({truck.plateNumber} {truck.capacityCbm} CBM)
+                        {truck.truckName} ({truck.plateNumber} {truck.capacityCbm} CBM)
                       </option>
                     ))}
                 </select>
@@ -2267,7 +2477,7 @@ const DredgingDashboard: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700">Number of Trips</label>
                 <input
                   type="number"
-                  value={tripForm.trips || ''}
+                  value={tripForm.trips || ""}
                   onChange={(e) => setTripForm({ ...tripForm, trips: parseInt(e.target.value) })}
                   className="w-full px-3 py-2 border rounded-lg"
                   placeholder="0"
@@ -2276,8 +2486,11 @@ const DredgingDashboard: React.FC = () => {
               {tripForm.truckId && (
                 <div className="bg-blue-50 p-3 rounded">
                   <p className="text-sm text-blue-800">
-                    <strong>Calculated Volume:</strong>{' '}
-                    {(tripForm.trips || 0) * (transporters.flatMap(t => t.trucks).find(tr => tr.id === tripForm.truckId)?.capacityCbm || 0)} CBM
+                    <strong>Calculated Volume:</strong> {" "}
+                    {(tripForm.trips || 0) *
+                      (transporters.flatMap((t) => t.trucks).find((tr) => tr.id === tripForm.truckId)?.capacityCbm || 0)}
+                    {" "}
+                    CBM
                   </p>
                 </div>
               )}
@@ -2285,7 +2498,7 @@ const DredgingDashboard: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700">Dumping Location</label>
                 <input
                   type="text"
-                  value={tripForm.dumpingLocation || ''}
+                  value={tripForm.dumpingLocation || ""}
                   onChange={(e) => setTripForm({ ...tripForm, dumpingLocation: e.target.value })}
                   className="w-full px-3 py-2 border rounded-lg"
                   placeholder="Site A, Location B, etc."
@@ -2294,7 +2507,7 @@ const DredgingDashboard: React.FC = () => {
               <div>
                 <label className="block text-sm font-medium text-gray-700">Notes</label>
                 <textarea
-                  value={tripForm.notes || ''}
+                  value={tripForm.notes || ""}
                   onChange={(e) => setTripForm({ ...tripForm, notes: e.target.value })}
                   className="w-full px-3 py-2 border rounded-lg"
                   rows={2}
@@ -2303,10 +2516,22 @@ const DredgingDashboard: React.FC = () => {
               </div>
             </div>
             <div className="flex justify-end space-x-2 mt-6">
-              <button type="button" onClick={() => { setShowTripModal(false); setEditingItem(null); setTripForm({}); }} className="px-4 py-2 border rounded-lg hover:bg-gray-50">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowTripModal(false);
+                  setEditingItem(null);
+                  setTripForm({});
+                }}
+                className="px-4 py-2 border rounded-lg hover:bg-gray-50"
+              >
                 Cancel
               </button>
-              <button type="button" onClick={() => saveTrip()} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+              <button
+                type="button"
+                onClick={() => saveTrip()}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
                 Save
               </button>
             </div>
@@ -2314,17 +2539,16 @@ const DredgingDashboard: React.FC = () => {
         </div>
       )}
 
-      {/* Payment Modal */}
       {showPaymentModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-md">
-            <h3 className="text-xl font-bold mb-4">{editingItem ? 'Edit' : 'Add'} Payment</h3>
+            <h3 className="text-xl font-bold mb-4">{editingItem ? "Edit" : "Add"} Payment</h3>
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700">Date</label>
                 <input
                   type="date"
-                  value={paymentForm.date || ''}
+                  value={paymentForm.date || ""}
                   onChange={(e) => setPaymentForm({ ...paymentForm, date: e.target.value })}
                   className="w-full px-3 py-2 border rounded-lg"
                 />
@@ -2332,8 +2556,8 @@ const DredgingDashboard: React.FC = () => {
               <div>
                 <label className="block text-sm font-medium text-gray-700">Payment Type</label>
                 <select
-                  value={paymentForm.entityType || 'dredger'}
-                  onChange={(e) => setPaymentForm({ ...paymentForm, entityType: e.target.value as 'dredger' | 'transporter', entityId: '' })}
+                  value={paymentForm.entityType || "dredger"}
+                  onChange={(e) => setPaymentForm({ ...paymentForm, entityType: e.target.value as "dredger" | "transporter", entityId: "" })}
                   className="w-full px-3 py-2 border rounded-lg"
                 >
                   <option value="dredger">Dredger</option>
@@ -2344,21 +2568,29 @@ const DredgingDashboard: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700">Entity</label>
                 <select
                   value={
-                    (paymentForm.entityType || 'dredger') === 'dredger'
-                      ? (dredgers.find(d => d.id === paymentForm.entityId || d.code === paymentForm.entityId)?.code || paymentForm.entityId || '')
-                      : (paymentForm.entityId || '')
+                    (paymentForm.entityType || "dredger") === "dredger"
+                      ? dredgers.find((d) => d.id === paymentForm.entityId || d.code === paymentForm.entityId)?.code || paymentForm.entityId || ""
+                      : paymentForm.entityId || ""
                   }
                   onChange={(e) => setPaymentForm({ ...paymentForm, entityId: e.target.value })}
                   className="w-full px-3 py-2 border rounded-lg"
                 >
                   <option value="">Select Entity</option>
-                  {(paymentForm.entityType || 'dredger') === 'dredger'
-                    ? dredgers.map(d => <option key={d.code} value={d.code}>{d.name}</option>)
-                    : Array.from(new Set(
-                        transporters.map(t => t.contractor ? t.contractor.trim() : '').filter(c => c !== '')
-                      )).sort().map(contractor => (
-                        <option key={contractor} value={contractor}>{contractor}</option>
-                      ))}
+                  {(paymentForm.entityType || "dredger") === "dredger"
+                    ? dredgers.map((d) => (
+                        <option key={d.code} value={d.code}>
+                          {d.name}
+                        </option>
+                      ))
+                    : Array.from(
+                        new Set(transporters.map((t) => (t.contractor ? t.contractor.trim() : "")).filter((c) => c !== ""))
+                      )
+                        .sort()
+                        .map((contractor) => (
+                          <option key={contractor} value={contractor}>
+                            {contractor}
+                          </option>
+                        ))}
                 </select>
               </div>
               <div>
@@ -2366,7 +2598,7 @@ const DredgingDashboard: React.FC = () => {
                 <input
                   type="number"
                   step="0.01"
-                  value={paymentForm.amount || ''}
+                  value={paymentForm.amount || ""}
                   onChange={(e) => setPaymentForm({ ...paymentForm, amount: parseFloat(e.target.value) })}
                   className="w-full px-3 py-2 border rounded-lg"
                   placeholder="0.00"
@@ -2375,7 +2607,7 @@ const DredgingDashboard: React.FC = () => {
               <div>
                 <label className="block text-sm font-medium text-gray-700">Payment Method</label>
                 <select
-                  value={paymentForm.paymentMethod || 'Bank Transfer'}
+                  value={paymentForm.paymentMethod || "Bank Transfer"}
                   onChange={(e) => setPaymentForm({ ...paymentForm, paymentMethod: e.target.value })}
                   className="w-full px-3 py-2 border rounded-lg"
                 >
@@ -2389,7 +2621,7 @@ const DredgingDashboard: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700">Reference Number</label>
                 <input
                   type="text"
-                  value={paymentForm.reference || ''}
+                  value={paymentForm.reference || ""}
                   onChange={(e) => setPaymentForm({ ...paymentForm, reference: e.target.value })}
                   className="w-full px-3 py-2 border rounded-lg"
                   placeholder="PAY-2024-XXX"
@@ -2398,7 +2630,7 @@ const DredgingDashboard: React.FC = () => {
               <div>
                 <label className="block text-sm font-medium text-gray-700">Notes</label>
                 <textarea
-                  value={paymentForm.notes || ''}
+                  value={paymentForm.notes || ""}
                   onChange={(e) => setPaymentForm({ ...paymentForm, notes: e.target.value })}
                   className="w-full px-3 py-2 border rounded-lg"
                   rows={2}
@@ -2407,10 +2639,22 @@ const DredgingDashboard: React.FC = () => {
               </div>
             </div>
             <div className="flex justify-end space-x-2 mt-6">
-              <button type="button" onClick={() => { setShowPaymentModal(false); setEditingItem(null); setPaymentForm({}); }} className="px-4 py-2 border rounded-lg hover:bg-gray-50">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowPaymentModal(false);
+                  setEditingItem(null);
+                  setPaymentForm({});
+                }}
+                className="px-4 py-2 border rounded-lg hover:bg-gray-50"
+              >
                 Cancel
               </button>
-              <button type="button" onClick={() => savePayment()} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+              <button
+                type="button"
+                onClick={() => savePayment()}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
                 Save
               </button>
             </div>
@@ -2421,4 +2665,8 @@ const DredgingDashboard: React.FC = () => {
   );
 };
 
-export default DredgingDashboard;
+export function App() {
+  return <DredgingDashboard />;
+}
+
+export default App;
