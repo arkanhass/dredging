@@ -417,38 +417,33 @@ const DredgingDashboard: React.FC = () => {
   const submitToAppsScript = async (action: string, data: any, onSuccess: () => void, silent = false) => {
     const payload = { action, data };
 
-    try {
-      await fetch(APPS_SCRIPT_URL, {
-        method: "POST",
-        mode: "no-cors",
-        headers: {
-          "Content-Type": "text/plain",
-        },
-        body: JSON.stringify(payload),
-      });
+    // Run the POST first, then refresh state after a short buffer to allow Apps Script to append/update
+    const send = async () => {
+      try {
+        await fetch(APPS_SCRIPT_URL, {
+          method: "POST",
+          mode: "no-cors",
+          headers: { "Content-Type": "text/plain" },
+          body: JSON.stringify(payload),
+        });
+      } catch (error) {
+        console.warn("Fetch error (likely CORS false positive):", error);
+      }
+    };
 
-      if (!silent) {
-        setTimeout(async () => {
-          await loadDataFromSheets();
-          onSuccess();
-          alert("Action completed! Data reloading...");
-        }, 2500);
-      } else {
+    await send();
+
+    // Always refresh after a small delay to re-pull truth from Sheets
+    const refreshDelay = 1800;
+
+    if (!silent) {
+      setTimeout(async () => {
+        await loadDataFromSheets();
         onSuccess();
-        setTimeout(() => loadDataFromSheets(), 3000);
-      }
-    } catch (error) {
-      console.warn("Fetch error (likely CORS false positive):", error);
-      if (!silent) {
-        setTimeout(async () => {
-          await loadDataFromSheets();
-          onSuccess();
-          alert("Action completed! Data reloading... (UI updated)");
-        }, 2500);
-      } else {
-        onSuccess();
-        setTimeout(() => loadDataFromSheets(), 3000);
-      }
+      }, refreshDelay);
+    } else {
+      onSuccess();
+      setTimeout(() => loadDataFromSheets(), refreshDelay);
     }
   };
 
@@ -617,31 +612,16 @@ const DredgingDashboard: React.FC = () => {
     if (editingItem) {
       const oldReference = editingItem.reference;
 
-      try {
-        await fetch(APPS_SCRIPT_URL, {
-          method: "POST",
-          mode: "no-cors",
-          headers: { "Content-Type": "text/plain" },
-          body: JSON.stringify({ action: "deletePayment", data: { reference: oldReference } }),
-        });
-      } catch (err) {
-        console.warn("Delete request sent (no-cors):", err);
-      }
+      // Delete the old payment row by reference, then add the new row
+      await submitToAppsScript("deletePayment", { reference: oldReference }, () => {}, true);
 
-      await new Promise((resolve) => setTimeout(resolve, 2500));
+      // small buffer before re-adding
+      await new Promise((resolve) => setTimeout(resolve, 400));
 
-      try {
-        await fetch(APPS_SCRIPT_URL, {
-          method: "POST",
-          mode: "no-cors",
-          headers: { "Content-Type": "text/plain" },
-          body: JSON.stringify({ action: "savePayment", data: paymentData }),
-        });
-      } catch (err) {
-        console.warn("Save request sent (no-cors):", err);
-      }
+      await submitToAppsScript("savePayment", paymentData, () => {}, true);
 
-      setTimeout(() => loadDataFromSheets(), 2500);
+      // Final refresh to sync state
+      setTimeout(() => loadDataFromSheets(), 1200);
     } else {
       submitToAppsScript("savePayment", paymentData, () => {}, true);
     }
@@ -849,8 +829,8 @@ const DredgingDashboard: React.FC = () => {
             const transporterCode = row.TransporterCode || row.transporterCode;
             const plateNumber = row.PlateNumber || row.plateNumber;
             const tripsCount = parseInt(row.Trips || row.trips || 0);
-            const drRate = parseFloat(row.DredgerRate || row.dredgerRate || 0);
-            const trRate = parseFloat(row.TransporterRate || row.transporterRate || 0);
+            const drRate = parseMoney(row.DredgerRate || row.dredgerRate || 0);
+            const trRate = parseMoney(row.TransporterRate || row.transporterRate || 0);
 
             let capacity = 0;
             const transporter = transporters.find((t) => t.code === transporterCode);
@@ -858,6 +838,9 @@ const DredgingDashboard: React.FC = () => {
               const truck = transporter.trucks.find((t: any) => t.plateNumber === plateNumber);
               if (truck) capacity = truck.capacityCbm;
             }
+
+            const dredgerAmountFromSheet = parseMoney(row.DredgerAmount ?? row.dredgerAmount ?? row["Dredger Amount"]);
+            const transporterAmountFromSheet = parseMoney(row.TransporterAmount ?? row.transporterAmount ?? row["Transporter Amount"]);
 
             payload = {
               Date: tripDate,
@@ -869,8 +852,8 @@ const DredgingDashboard: React.FC = () => {
               TransporterRate: trRate,
               DumpingLocation: row.DumpingLocation || row.dumpingLocation || "",
               Notes: row.Notes || row.notes || "",
-              DredgerAmount: tripsCount * capacity * drRate,
-              TransporterAmount: tripsCount * capacity * trRate,
+              DredgerAmount: dredgerAmountFromSheet || tripsCount * capacity * drRate,
+              TransporterAmount: transporterAmountFromSheet || tripsCount * capacity * trRate,
             };
           } else if (type === "payments") {
             action = "savePayment";
@@ -888,7 +871,7 @@ const DredgingDashboard: React.FC = () => {
               Date: parseDate(row.Date || row.date),
               EntityType: rawEntityType.charAt(0).toUpperCase() + rawEntityType.slice(1),
               EntityCode: row.EntityId || row.entityId || row.EntityCode || row.entityCode,
-              Amount: parseFloat(row.Amount || row.amount || 0),
+              Amount: parseMoney(row.Amount || row.amount || 0),
               PaymentMethod: row.PaymentMethod || row.paymentMethod || "Bank Transfer",
               Reference: row.Reference || row.reference || `PAY-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
               Notes: row.Notes || row.notes || "",
