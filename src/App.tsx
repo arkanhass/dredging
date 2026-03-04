@@ -569,11 +569,8 @@ const DredgingDashboard: React.FC = () => {
     } else {
       const rawId = paymentForm.entityId || "";
       const matchedTransporter = transporters.find((t) => t.code === rawId || t.id === rawId);
-      if (matchedTransporter && matchedTransporter.contractor) {
-        entityCode = matchedTransporter.contractor.trim();
-      } else {
-        entityCode = rawId;
-      }
+      // Always send transporter CODE to Sheets (not contractor name)
+      entityCode = matchedTransporter?.code || rawId;
     }
 
     const newPayment: Payment = {
@@ -630,13 +627,13 @@ const DredgingDashboard: React.FC = () => {
       await post("deletePayment", { Reference: oldReference });
 
       // 2) give Apps Script time to remove before re-adding
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+      await new Promise((resolve) => setTimeout(resolve, 2200));
 
       // 3) save the updated payment (reuse old ref if user left it blank)
       await post("savePayment", { ...paymentData, Reference: newReference || oldReference });
 
       // 4) final refresh to sync state from Sheets
-      setTimeout(() => loadDataFromSheets(), 2200);
+      setTimeout(() => loadDataFromSheets(), 2400);
     } else {
       submitToAppsScript("savePayment", paymentData, () => {}, true);
     }
