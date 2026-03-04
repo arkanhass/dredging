@@ -508,9 +508,11 @@ const DredgingDashboard: React.FC = () => {
       setPayments(prev => [...prev, newPayment]);
     }
 
+    const capitalizeFirst = (s: string) => s ? s.charAt(0).toUpperCase() + s.slice(1) : '';
+
     const paymentData: any = {
       Date: paymentForm.date,
-      EntityType: paymentForm.entityType,
+      EntityType: capitalizeFirst(paymentForm.entityType || 'dredger'),
       EntityCode: entityCode,
       Amount: paymentForm.amount,
       PaymentMethod: paymentForm.paymentMethod || 'Bank Transfer',
@@ -789,9 +791,10 @@ const DredgingDashboard: React.FC = () => {
                return d;
              };
              
+             const rawEntityType = (row.EntityType || row.entityType || 'dredger').toLowerCase();
              payload = {
                Date: parseDate(row.Date || row.date),
-               EntityType: (row.EntityType || row.entityType || 'dredger').toLowerCase(),
+               EntityType: rawEntityType.charAt(0).toUpperCase() + rawEntityType.slice(1),
                EntityCode: row.EntityId || row.entityId || row.EntityCode || row.entityCode,
                Amount: parseFloat(row.Amount || row.amount || 0),
                PaymentMethod: row.PaymentMethod || row.paymentMethod || 'Bank Transfer',
@@ -864,7 +867,8 @@ const DredgingDashboard: React.FC = () => {
              const matchedByCode = transporters.find(t => t.code === p.entityId || t.id === p.entityId);
              entityName = (matchedByCode && matchedByCode.contractor) ? matchedByCode.contractor.trim() : (p.entityId || '');
         }
-        csv += `${p.date},${p.entityType},${entityName},${p.amount},${p.paymentMethod},${p.reference},${p.notes}\n`;
+        const displayType = p.entityType.charAt(0).toUpperCase() + p.entityType.slice(1);
+        csv += `${p.date},${displayType},${entityName},${p.amount},${p.paymentMethod},${p.reference},${p.notes}\n`;
       });
       filename = 'payments_report.csv';
     }
@@ -1719,7 +1723,7 @@ const DredgingDashboard: React.FC = () => {
                         <td className="px-4 py-3">{formatDisplayDate(payment.date)}</td>
                         <td className="px-4 py-3">
                           <span className={`px-2 py-1 rounded text-xs font-medium ${payment.entityType === 'dredger' ? 'bg-orange-100 text-orange-800' : 'bg-purple-100 text-purple-800'}`}>
-                            {payment.entityType}
+                            {payment.entityType.charAt(0).toUpperCase() + payment.entityType.slice(1)}
                           </span>
                         </td>
                         <td className="px-4 py-3 font-medium">{entityName}</td>
