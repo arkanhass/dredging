@@ -1,8 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Plus, Edit, Trash2, Download, Upload, FileSpreadsheet,
-  Ship, Truck, DollarSign, Calendar, BarChart3, Activity
+  Ship, Truck, Calendar, BarChart3, Activity
 } from 'lucide-react';
+
+// Custom Naira Icon Component
+const NairaIcon: React.FC<{ className?: string }> = ({ className = "w-6 h-6" }) => (
+  <span className={`inline-flex items-center justify-center font-bold ${className}`} style={{ fontSize: 'inherit' }}>
+    ₦
+  </span>
+);
 import * as XLSX from 'xlsx';
 
 // Types
@@ -511,26 +518,44 @@ const DredgingDashboard: React.FC = () => {
       Notes: paymentForm.notes || '',
     };
 
-    const closeAndReset = () => {
-      setShowPaymentModal(false);
-      setEditingItem(null);
-      setPaymentForm({});
-    };
+    setShowPaymentModal(false);
+    setEditingItem(null);
+    setPaymentForm({});
 
     // If editing, delete old row first then add updated row
     if (editingItem) {
       const oldReference = editingItem.reference;
-      closeAndReset();
 
-      // Step 1: Delete old payment by reference
-      submitToAppsScript('deletePayment', { reference: oldReference }, () => {
-        // Step 2: After delete completes, add the new/updated payment
-        setTimeout(() => {
-          submitToAppsScript('savePayment', paymentData, () => {}, true);
-        }, 1500);
-      }, true);
+      // Step 1: Send delete request for old payment
+      try {
+        await fetch(APPS_SCRIPT_URL, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify({ action: 'deletePayment', data: { reference: oldReference } }),
+        });
+      } catch (err) {
+        console.warn('Delete request sent (no-cors):', err);
+      }
+
+      // Step 2: Wait for delete to process on Google Sheets side
+      await new Promise(resolve => setTimeout(resolve, 2500));
+
+      // Step 3: Now add the updated payment as new row
+      try {
+        await fetch(APPS_SCRIPT_URL, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify({ action: 'savePayment', data: paymentData }),
+        });
+      } catch (err) {
+        console.warn('Save request sent (no-cors):', err);
+      }
+
+      // Step 4: Reload data after save completes
+      setTimeout(() => loadDataFromSheets(), 2500);
     } else {
-      closeAndReset();
       submitToAppsScript('savePayment', paymentData, () => {}, true);
     }
   };
@@ -895,15 +920,7 @@ const DredgingDashboard: React.FC = () => {
                 <p className="text-blue-200 text-sm">Sand Dredging & Haulage Management System</p>
               </div>
             </div>
-            <div className="flex items-center space-x-2">
-              <button
-                onClick={loadDataFromSheets}
-                className="px-3 py-2 bg-blue-800 hover:bg-blue-700 rounded text-sm flex items-center space-x-1"
-              >
-                <Upload className="w-4 h-4" />
-                <span>Sync Data</span>
-              </button>
-            </div>
+
           </div>
         </div>
       </header>
@@ -1023,8 +1040,8 @@ const DredgingDashboard: React.FC = () => {
                     <p className="text-gray-500 text-sm">Total Paid</p>
                     <p className="text-2xl font-bold text-red-600">{formatCurrency(overallStats.totalPaid)}</p>
                   </div>
-                  <div className="bg-red-100 p-3 rounded-full">
-                    <DollarSign className="w-6 h-6 text-red-600" />
+                  <div className="bg-red-100 p-3 rounded-full text-red-600 text-xl">
+                    <NairaIcon />
                   </div>
                 </div>
               </div>
@@ -1931,7 +1948,7 @@ const DredgingDashboard: React.FC = () => {
             {/* Accounting Summary */}
             <div className="bg-white rounded-lg shadow p-6">
               <h3 className="font-bold text-xl mb-4 flex items-center space-x-2">
-                <DollarSign className="w-6 h-6" />
+                <span className="text-2xl font-bold">₦</span>
                 <span>Accounting Summary</span>
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
