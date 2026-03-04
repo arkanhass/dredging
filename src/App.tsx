@@ -610,18 +610,33 @@ const DredgingDashboard: React.FC = () => {
     setPaymentForm({});
 
     if (editingItem) {
-      const oldReference = editingItem.reference;
+      const oldReference = (editingItem.reference || "").trim();
+      const newReference = (paymentData.Reference || "").trim();
 
-      // Delete the old payment row by reference, then add the new row
-      await submitToAppsScript("deletePayment", { reference: oldReference }, () => {}, true);
+      const post = async (action: string, data: any) => {
+        try {
+          await fetch(APPS_SCRIPT_URL, {
+            method: "POST",
+            mode: "no-cors",
+            headers: { "Content-Type": "text/plain" },
+            body: JSON.stringify({ action, data }),
+          });
+        } catch (err) {
+          console.warn(`${action} request sent (no-cors):`, err);
+        }
+      };
 
-      // small buffer before re-adding
-      await new Promise((resolve) => setTimeout(resolve, 400));
+      // 1) delete the existing row by its original reference
+      await post("deletePayment", { reference: oldReference });
 
-      await submitToAppsScript("savePayment", paymentData, () => {}, true);
+      // 2) give Apps Script time to remove before re-adding
+      await new Promise((resolve) => setTimeout(resolve, 2000));
 
-      // Final refresh to sync state
-      setTimeout(() => loadDataFromSheets(), 1200);
+      // 3) save the updated payment (reuse old ref if user left it blank)
+      await post("savePayment", { ...paymentData, Reference: newReference || oldReference });
+
+      // 4) final refresh to sync state from Sheets
+      setTimeout(() => loadDataFromSheets(), 2200);
     } else {
       submitToAppsScript("savePayment", paymentData, () => {}, true);
     }
