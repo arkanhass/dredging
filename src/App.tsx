@@ -626,8 +626,8 @@ const DredgingDashboard: React.FC = () => {
         }
       };
 
-      // 1) delete the existing row by its original reference
-      await post("deletePayment", { reference: oldReference });
+      // 1) delete the existing row by its original reference (Apps Script expects "Reference" key)
+      await post("deletePayment", { Reference: oldReference });
 
       // 2) give Apps Script time to remove before re-adding
       await new Promise((resolve) => setTimeout(resolve, 2000));
