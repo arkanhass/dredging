@@ -273,13 +273,15 @@ const DredgingDashboard: React.FC = () => {
 
           const transporter = transporterMap.get(transporterCode);
           const truck = transporter?.trucks.find((t: any) => t.plateNumber === plateNumber);
-          const capacityCbm = parseMoney(row[8]) || truck?.capacityCbm || truck?.capacityCbm || 0; // fallback to sheet cap if provided
+          const capacityCbm = truck?.capacityCbm ?? 0; // trust truck capacity; sheet amounts handle rate differences
           const tripsCount = parseInt(row[4]) || 0;
 
           const dredgerRate = parseMoney(row[5]);
           const transporterRate = parseMoney(row[6]);
-          const dredgerAmount = parseMoney(row[9]) || tripsCount * capacityCbm * dredgerRate;
-          const transporterAmount = parseMoney(row[10]) || tripsCount * capacityCbm * transporterRate;
+                    const dredgerAmount = parseMoney(row[9]);
+          const transporterAmount = Number.isFinite(parseMoney(row[10]))
+            ? parseMoney(row[10])
+            : tripsCount * capacityCbm * transporterRate;
 
           return {
             id: `trip-${i}`,
@@ -344,11 +346,7 @@ const DredgingDashboard: React.FC = () => {
     const dredgerCode = dredger?.code || "";
     const dredgerTrips = tripsData.filter((t) => t.dredgerId === dredgerId);
     const totalVolume = dredgerTrips.reduce((sum, t) => sum + t.totalVolume, 0);
-    const totalAmount = dredgerTrips.reduce(
-      (sum, t) =>
-        sum + (Number.isFinite(t.dredgerAmount) ? t.dredgerAmount : t.totalVolume * (t.dredgerRate || 0)),
-      0
-    );
+    const totalAmount = dredgerTrips.reduce((sum, t) => sum + (Number.isFinite(t.dredgerAmount) ? t.dredgerAmount : 0), 0);
     const totalPaid = paymentsData
       .filter((p) => p.entityType === "dredger" && (p.entityId === dredgerId || p.entityId === dredgerCode))
       .reduce((sum, p) => sum + p.amount, 0);
@@ -398,16 +396,19 @@ const DredgingDashboard: React.FC = () => {
   const overallStats = {
     totalVolume: dashboardTrips.reduce((sum, t) => sum + t.totalVolume, 0),
     totalTrips: dashboardTrips.reduce((sum, t) => sum + t.trips, 0),
-    totalDredgerCost: dashboardTrips.reduce(
-      (sum, t) => sum + (Number.isFinite(t.dredgerAmount) ? t.dredgerAmount : t.totalVolume * (t.dredgerRate || 0)),
-      0
-    ),
-    totalTransporterCost: dashboardTrips.reduce(
-      (sum, t) => sum + (Number.isFinite(t.transporterAmount) ? t.transporterAmount : t.totalVolume * (t.transporterRate || 0)),
-      0
-    ),
+    totalDredgerCost: dashboardTrips.reduce((sum, t) => {
+      const amt = Number.isFinite(t.dredgerAmount) ? t.dredgerAmount : 0;
+      return sum + amt;
+    }, 0),
+    totalTransporterCost: dashboardTrips.reduce((sum, t) => {
+      const amt = Number.isFinite(t.transporterAmount)
+        ? t.transporterAmount
+        : t.totalVolume * (t.transporterRate || 0);
+      return sum + amt;
+    }, 0),
     totalPaid: dashboardPayments.reduce((sum, p) => sum + p.amount, 0),
   };
+
 
   // Google Apps Script URL
   const APPS_SCRIPT_URL =
@@ -928,9 +929,7 @@ const DredgingDashboard: React.FC = () => {
       trips.forEach((t) => {
         const dredger = dredgers.find((d) => d.id === t.dredgerId);
         const transporter = transporters.find((tr) => tr.id === t.transporterId);
-        const dredgerAmount = Number.isFinite(t.dredgerAmount)
-          ? t.dredgerAmount
-          : t.totalVolume * (t.dredgerRate || 0);
+        const dredgerAmount = Number.isFinite(t.dredgerAmount) ? t.dredgerAmount : 0;
         const transporterAmount = Number.isFinite(t.transporterAmount)
           ? t.transporterAmount
           : t.totalVolume * (t.transporterRate || 0);
@@ -997,6 +996,13 @@ const DredgingDashboard: React.FC = () => {
       const bIso = toSortableISO(b.date);
       return bIso.localeCompare(aIso);
     });
+
+  // Payments sorted newest -> oldest by date (falls back to original ordering if missing)
+  const sortedPayments = [...payments].sort((a, b) => {
+    const aIso = toSortableISO(a.date);
+    const bIso = toSortableISO(b.date);
+    return bIso.localeCompare(aIso);
+  });
 
   const formatCurrency = (amount: number) => `₦${amount.toLocaleString()}`;
 
@@ -1854,7 +1860,7 @@ const DredgingDashboard: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {payments.map((payment) => {
+                  {sortedPayments.map((payment) => {
                     let entityName = "";
                     if (payment.entityType === "dredger") {
                       const dr = dredgers.find((d) => d.id === payment.entityId || d.code === payment.entityId);
