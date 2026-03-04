@@ -286,6 +286,10 @@ const DredgingDashboard: React.FC = () => {
   };
 
   const calculateTransporterEarnings = (transporterId: string, tripsData = trips, paymentsData = payments) => {
+    const transporter = transporters.find(t => t.id === transporterId);
+    const transporterCode = transporter?.code || '';
+    const contractorName = transporter?.contractor?.trim() || '';
+
     const transporterTrips = tripsData.filter(t => t.transporterId === transporterId);
     const totalTrips = transporterTrips.reduce((sum, t) => sum + t.trips, 0);
     const totalVolume = transporterTrips.reduce((sum, t) => sum + t.totalVolume, 0);
@@ -295,7 +299,13 @@ const DredgingDashboard: React.FC = () => {
        return sum + (t.totalVolume * (t.transporterRate || 0));
     }, 0);
     
-    const totalPaid = paymentsData.filter(p => p.entityType === 'transporter' && p.entityId === transporterId).reduce((sum, p) => sum + p.amount, 0);
+    // Match payments by transporterId, transporter code, or contractor name
+    const totalPaid = paymentsData.filter(p => {
+      if (p.entityType !== 'transporter') return false;
+      return p.entityId === transporterId || 
+             p.entityId === transporterCode || 
+             (contractorName && p.entityId === contractorName);
+    }).reduce((sum, p) => sum + p.amount, 0);
     return { totalTrips, totalVolume, totalAmount, totalPaid, balance: totalAmount - totalPaid };
   };
 
@@ -463,8 +473,15 @@ const DredgingDashboard: React.FC = () => {
       const entity = dredgers.find(d => d.id === paymentForm.entityId || d.code === paymentForm.entityId);
       entityCode = entity?.code || paymentForm.entityId || '';
     } else {
-      // For transporters, the entityId is the Contractor Name itself
-      entityCode = paymentForm.entityId || '';
+      // For transporters, resolve code to contractor name if needed
+      const rawId = paymentForm.entityId || '';
+      // Check if rawId is a transporter code, if so resolve to contractor name
+      const matchedTransporter = transporters.find(t => t.code === rawId || t.id === rawId);
+      if (matchedTransporter && matchedTransporter.contractor) {
+        entityCode = matchedTransporter.contractor.trim();
+      } else {
+        entityCode = rawId;
+      }
     }
     
     const newPayment: Payment = {
@@ -494,16 +511,28 @@ const DredgingDashboard: React.FC = () => {
       Notes: paymentForm.notes || '',
     };
 
-    // If editing, include OldReference so Apps Script can find and update the row in-place
+    const closeAndReset = () => {
+      setShowPaymentModal(false);
+      setEditingItem(null);
+      setPaymentForm({});
+    };
+
+    // If editing, delete old row first then add updated row
     if (editingItem) {
-      paymentData.OldReference = editingItem.reference;
+      const oldReference = editingItem.reference;
+      closeAndReset();
+
+      // Step 1: Delete old payment by reference
+      submitToAppsScript('deletePayment', { reference: oldReference }, () => {
+        // Step 2: After delete completes, add the new/updated payment
+        setTimeout(() => {
+          submitToAppsScript('savePayment', paymentData, () => {}, true);
+        }, 1500);
+      }, true);
+    } else {
+      closeAndReset();
+      submitToAppsScript('savePayment', paymentData, () => {}, true);
     }
-
-    setShowPaymentModal(false);
-    setEditingItem(null);
-    setPaymentForm({});
-
-    submitToAppsScript('savePayment', paymentData, () => {}, true);
   };
 
   const deleteItem = async (type: 'dredger' | 'transporter' | 'trip' | 'payment', id: string) => {
@@ -806,7 +835,9 @@ const DredgingDashboard: React.FC = () => {
         if (p.entityType === 'dredger') {
              entityName = dredgers.find(d => d.id === p.entityId || d.code === p.entityId)?.name || p.entityId || '';
         } else {
-             entityName = p.entityId; // For transporters, entityId is the Contractor Name
+             // Resolve transporter code to contractor name if needed
+             const matchedByCode = transporters.find(t => t.code === p.entityId || t.id === p.entityId);
+             entityName = (matchedByCode && matchedByCode.contractor) ? matchedByCode.contractor.trim() : (p.entityId || '');
         }
         csv += `${p.date},${p.entityType},${entityName},${p.amount},${p.paymentMethod},${p.reference},${p.notes}\n`;
       });
@@ -1655,8 +1686,15 @@ const DredgingDashboard: React.FC = () => {
                         const dr = dredgers.find(d => d.id === payment.entityId || d.code === payment.entityId);
                         entityName = dr?.name || payment.entityId || '';
                     } else {
-                        // For transporters, the entityId IS the contractor name
-                        entityName = payment.entityId;
+                        // For transporters: entityId might be contractor name OR transporter code
+                        // Try to resolve transporter code to contractor name
+                        const matchedByCode = transporters.find(t => t.code === payment.entityId || t.id === payment.entityId);
+                        if (matchedByCode && matchedByCode.contractor) {
+                          entityName = matchedByCode.contractor.trim();
+                        } else {
+                          // Already a contractor name or unresolvable — show as-is
+                          entityName = payment.entityId || '';
+                        }
                     }
 
                     return (
