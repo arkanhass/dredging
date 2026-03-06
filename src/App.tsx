@@ -303,23 +303,30 @@ const DredgingDashboard: React.FC = () => {
         })
       );
 
-      // 4. Load Payments
+      // 4. Load Payments (dedupe by reference, keep latest)
       const payRes = await fetch(
         `https://sheets.googleapis.com/v4/spreadsheets/${GOOGLE_SHEETS_CONFIG.spreadsheetId}/values/Payments?key=${GOOGLE_SHEETS_CONFIG.apiKey}`
       );
       const payData = await payRes.json();
-      setPayments(
-        (payData.values || []).slice(1).map((row: any[], i: number) => ({
-          id: `pay-${i}`,
-          date: row[0],
-          entityType: (row[1] || "dredger").toLowerCase() as any,
-          entityId: row[2],
-          amount: parseFloat(row[3]) || 0,
-          paymentMethod: row[4] || "Bank Transfer",
-          reference: row[5],
-          notes: row[6] || "",
-        }))
-      );
+
+      const paymentsMap = new Map<string, Payment>();
+      (payData.values || [])
+        .slice(1)
+        .forEach((row: any[], i: number) => {
+          const ref = (row[5] || `pay-${i}`).toString().trim();
+          paymentsMap.set(ref, {
+            id: `pay-${i}`,
+            date: row[0],
+            entityType: (row[1] || "dredger").toLowerCase() as any,
+            entityId: row[2],
+            amount: parseFloat(row[3]) || 0,
+            paymentMethod: row[4] || "Bank Transfer",
+            reference: ref,
+            notes: row[6] || "",
+          });
+        });
+
+      setPayments(Array.from(paymentsMap.values()));
     } catch (err) {
       console.error(err);
     }
@@ -584,6 +591,7 @@ const DredgingDashboard: React.FC = () => {
       notes: paymentForm.notes || "",
     };
 
+
     if (editingItem) {
       setPayments((prev) => prev.map((p) => (p.id === editingItem.id ? newPayment : p)));
     } else {
@@ -623,17 +631,17 @@ const DredgingDashboard: React.FC = () => {
         }
       };
 
-      // 1) delete the existing row by its original reference (Apps Script expects "Reference" key)
-      await post("deletePayment", { Reference: oldReference });
+      // 1) delete the existing row by its original reference (send both keys to match Apps Script expectations)
+      await post("deletePayment", { Reference: oldReference, reference: oldReference });
 
-      // 2) give Apps Script time to remove before re-adding
-      await new Promise((resolve) => setTimeout(resolve, 2200));
+      // 2) wait longer to ensure deletion is processed on Sheets
+      await new Promise((resolve) => setTimeout(resolve, 5200));
 
       // 3) save the updated payment (reuse old ref if user left it blank)
-      await post("savePayment", { ...paymentData, Reference: newReference || oldReference });
+      await post("savePayment", { ...paymentData, Reference: newReference || oldReference, reference: newReference || oldReference });
 
-      // 4) final refresh to sync state from Sheets
-      setTimeout(() => loadDataFromSheets(), 2400);
+      // 4) final refresh to sync state from Sheets (allow time for append)
+      setTimeout(() => loadDataFromSheets(), 5200);
     } else {
       submitToAppsScript("savePayment", paymentData, () => {}, true);
     }
@@ -974,9 +982,11 @@ const DredgingDashboard: React.FC = () => {
     .filter((t) => {
       const lowerSearch = searchTerm.toLowerCase();
 
-      const transporterName = transporters.find((tr) => tr.id === t.transporterId)?.name.toLowerCase() || "";
+      const transporterName = (transporters.find((tr) => tr.id === t.transporterId)?.name || "").toLowerCase();
+      const plate = (t.plateNumber || "").toLowerCase();
+      const dumping = (t.dumpingLocation || "").toLowerCase();
 
-      const haystack = t.plateNumber.toLowerCase() + " " + transporterName + " " + t.dumpingLocation.toLowerCase();
+      const haystack = `${plate} ${transporterName} ${dumping}`;
 
       const matchSearch = !lowerSearch || haystack.includes(lowerSearch);
 
@@ -993,11 +1003,14 @@ const DredgingDashboard: React.FC = () => {
     });
 
   // Payments sorted newest -> oldest by date (falls back to original ordering if missing)
-  const sortedPayments = [...payments].sort((a, b) => {
-    const aIso = toSortableISO(a.date);
-    const bIso = toSortableISO(b.date);
-    return bIso.localeCompare(aIso);
-  });
+  const sortedPayments = [...payments]
+    .filter((p) => !!p)
+    .map((p) => ({ ...p, date: p.date || "" }))
+    .sort((a, b) => {
+      const aIso = toSortableISO(a.date || "");
+      const bIso = toSortableISO(b.date || "");
+      return bIso.localeCompare(aIso);
+    });
 
   const formatCurrency = (amount: number) => `₦${amount.toLocaleString()}`;
 
@@ -2571,7 +2584,16 @@ const DredgingDashboard: React.FC = () => {
                   value={
                     (paymentForm.entityType || "dredger") === "dredger"
                       ? dredgers.find((d) => d.id === paymentForm.entityId || d.code === paymentForm.entityId)?.code || paymentForm.entityId || ""
-                      : paymentForm.entityId || ""
+                      : (() => {
+                          const raw = paymentForm.entityId || "";
+                          const byCode = transporters.find((t) => t.code === raw);
+                          if (byCode) return byCode.code;
+                          const byId = transporters.find((t) => t.id === raw);
+                          if (byId) return byId.code;
+                          const byContractor = transporters.find((t) => (t.contractor || "").trim() === raw.trim());
+                          if (byContractor) return byContractor.code;
+                          return raw;
+                        })()
                   }
                   onChange={(e) => setPaymentForm({ ...paymentForm, entityId: e.target.value })}
                   className="w-full px-3 py-2 border rounded-lg"
@@ -2583,13 +2605,12 @@ const DredgingDashboard: React.FC = () => {
                           {d.name}
                         </option>
                       ))
-                    : Array.from(
-                        new Set(transporters.map((t) => (t.contractor ? t.contractor.trim() : "")).filter((c) => c !== ""))
-                      )
-                        .sort()
-                        .map((contractor) => (
-                          <option key={contractor} value={contractor}>
-                            {contractor}
+                    : transporters
+                        .slice()
+                        .sort((a, b) => a.name.localeCompare(b.name))
+                        .map((t) => (
+                          <option key={t.code} value={t.code}>
+                            {t.name} ({t.code}{t.contractor ? ` - ${t.contractor}` : ""})
                           </option>
                         ))}
                 </select>
