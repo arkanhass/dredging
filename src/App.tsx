@@ -160,10 +160,24 @@ const parseMoney = (val: any) => {
   return Number.isFinite(num) ? num : 0;
 };
 
+const escapeRegex = (str: string) => str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const matchesWholeWord = (value: string, query: string) => {
+  const q = query.trim();
+  if (!q) return true;
+  const pattern = new RegExp(`(^|\\b)${escapeRegex(q)}(\\b|$)`, "i");
+  return pattern.test(value.trim());
+};
+
 const DredgingDashboard: React.FC = () => {
   // State
   const [activeTab, setActiveTab] = useState<
-    "dashboard" | "dredgers" | "transporters" | "trips" | "payments" | "reports"
+    | "dashboard"
+    | "dredgers"
+    | "transporters"
+    | "trips"
+    | "payments"
+    | "reports"
+    | "transporterReport"
   >("dashboard");
   const [dredgers, setDredgers] = useState<Dredger[]>([]);
   const [transporters, setTransporters] = useState<Transporter[]>([]);
@@ -181,6 +195,17 @@ const DredgingDashboard: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [dateFilter, setDateFilter] = useState({ start: "", end: "" });
   const [dashboardDateFilter, setDashboardDateFilter] = useState({ start: "", end: "" });
+
+  // Transporter Report filters
+  const [trReportFilter, setTrReportFilter] = useState({
+    start: "",
+    end: "",
+    plate: "",
+    truckName: "",
+    dredgerId: "",
+    contractor: "",
+    groupBy: "date" as "date" | "truckName" | "plate" | "dredger" | "contractor",
+  });
 
   // Form states
   const [dredgerForm, setDredgerForm] = useState<Partial<Dredger>>({});
@@ -977,6 +1002,80 @@ const DredgingDashboard: React.FC = () => {
     a.click();
   };
 
+  const contractorOptions = React.useMemo(() => {
+    return Array.from(
+      new Set(
+        transporters
+          .map((t) => (t.contractor || "").trim())
+          .filter((c) => c.length > 0)
+      )
+    ).sort((a, b) => a.localeCompare(b));
+  }, [transporters]);
+
+  // Transporter report filtered & grouped
+  const transporterReportRows = React.useMemo(() => {
+    const startIso = trReportFilter.start ? toSortableISO(trReportFilter.start) : "";
+    const endIso = trReportFilter.end ? toSortableISO(trReportFilter.end) : "";
+    const plateSearch = trReportFilter.plate.trim();
+    const truckNameSearch = trReportFilter.truckName.trim();
+    const dredgerIdFilter = trReportFilter.dredgerId;
+    const contractorFilter = trReportFilter.contractor.trim().toLowerCase();
+
+    const filtered = trips.filter((t) => {
+      const iso = toSortableISO(t.date);
+      if (startIso && iso < startIso) return false;
+      if (endIso && iso > endIso) return false;
+      const plateVal = (t.plateNumber || "").toLowerCase();
+      if (plateSearch && !plateVal.includes(plateSearch.toLowerCase())) return false;
+      const transporter = transporters.find((tr) => tr.id === t.transporterId || tr.code === t.transporterId);
+      const truck = transporter?.trucks.find((tr) => tr.id === t.truckId || tr.plateNumber === t.plateNumber);
+      if (truckNameSearch && !matchesWholeWord(truck?.truckName || "", trReportFilter.truckName)) return false;
+      if (dredgerIdFilter && t.dredgerId !== dredgerIdFilter) return false;
+      if (contractorFilter) {
+        const cName = (transporter?.contractor || "").trim().toLowerCase();
+        if (cName !== contractorFilter) return false;
+      }
+      return true;
+    });
+
+    const groupKey = (t: Trip) => {
+      if (trReportFilter.groupBy === "date") return toSortableISO(t.date);
+      if (trReportFilter.groupBy === "truckName") {
+        const truck = transporters.flatMap((tr) => tr.trucks).find((tr) => tr.id === t.truckId || tr.plateNumber === t.plateNumber);
+        return (truck?.truckName || "").trim() || "Unnamed";
+      }
+      if (trReportFilter.groupBy === "plate") return (t.plateNumber || "").trim();
+      if (trReportFilter.groupBy === "dredger") {
+        const dr = dredgers.find((d) => d.id === t.dredgerId);
+        return dr?.name || dr?.code || "";
+      }
+      if (trReportFilter.groupBy === "contractor") {
+        const transporter = transporters.find((tr) => tr.id === t.transporterId || tr.code === t.transporterId);
+        return transporter?.contractor || "Unassigned";
+      }
+      return "";
+    };
+
+    const groups = new Map<string, { key: string; rows: Trip[] }>();
+    filtered.forEach((t) => {
+      const key = groupKey(t) || "(Unspecified)";
+      if (!groups.has(key)) groups.set(key, { key, rows: [] });
+      groups.get(key)!.rows.push(t);
+    });
+
+    const result = Array.from(groups.values()).map((g) => {
+      const totalTrips = g.rows.reduce((s, r) => s + (r.trips || 0), 0);
+      const totalVolume = g.rows.reduce((s, r) => s + (r.totalVolume || 0), 0);
+      return { key: g.key, rows: g.rows, totalTrips, totalVolume };
+    });
+
+    // Sort groups by key for determinism (dates newest first if date)
+    return result.sort((a, b) => {
+      if (trReportFilter.groupBy === "date") return b.key.localeCompare(a.key);
+      return a.key.localeCompare(b.key);
+    });
+  }, [trReportFilter, trips, transporters, dredgers]);
+
   // Filter & sort trips
   const filteredTrips = trips
     .filter((t) => {
@@ -1041,6 +1140,7 @@ const DredgingDashboard: React.FC = () => {
               { id: "transporters", label: "Transporters", icon: Truck },
               { id: "trips", label: "Daily Trips", icon: Calendar },
               { id: "payments", label: "₦ Payments", icon: Activity },
+              { id: "transporterReport", label: "Transporter Report", icon: Truck },
               { id: "reports", label: "Reports", icon: FileSpreadsheet },
             ].map((tab) => (
               <button
@@ -1906,7 +2006,11 @@ const DredgingDashboard: React.FC = () => {
                             <button
                               onClick={() => {
                                 setEditingItem(payment);
-                                setPaymentForm(payment);
+                                setPaymentForm({
+                                  ...payment,
+                                  // normalize to YYYY-MM-DD for the date input
+                                  date: toSortableISO(payment.date || "") || payment.date || new Date().toISOString().split("T")[0],
+                                });
                                 setShowPaymentModal(true);
                               }}
                               className="p-1 text-blue-600 hover:bg-blue-50 rounded"
@@ -1926,6 +2030,157 @@ const DredgingDashboard: React.FC = () => {
                   })}
                 </tbody>
               </table>
+            </div>
+          </div>
+        )}
+
+        {/* Transporter Report Tab */}
+        {activeTab === "transporterReport" && (
+          <div className="space-y-4">
+            <div className="flex justify-between items-center flex-wrap gap-3">
+              <h2 className="text-2xl font-bold">Transporter Report</h2>
+              <div className="flex flex-wrap gap-2 items-center">
+                <input
+                  type="date"
+                  value={trReportFilter.start}
+                  onChange={(e) => setTrReportFilter({ ...trReportFilter, start: e.target.value })}
+                  className="px-3 py-2 border rounded-lg text-sm"
+                />
+                <input
+                  type="date"
+                  value={trReportFilter.end}
+                  onChange={(e) => setTrReportFilter({ ...trReportFilter, end: e.target.value })}
+                  className="px-3 py-2 border rounded-lg text-sm"
+                />
+                <input
+                  type="text"
+                  placeholder="Filter plate #"
+                  value={trReportFilter.plate}
+                  onChange={(e) => setTrReportFilter({ ...trReportFilter, plate: e.target.value })}
+                  className="px-3 py-2 border rounded-lg text-sm"
+                />
+                <input
+                  type="text"
+                  placeholder="Filter truck name"
+                  value={trReportFilter.truckName}
+                  onChange={(e) => setTrReportFilter({ ...trReportFilter, truckName: e.target.value })}
+                  className="px-3 py-2 border rounded-lg text-sm"
+                />
+                <select
+                  value={trReportFilter.dredgerId}
+                  onChange={(e) => setTrReportFilter({ ...trReportFilter, dredgerId: e.target.value })}
+                  className="px-3 py-2 border rounded-lg text-sm"
+                >
+                  <option value="">All Dredgers</option>
+                  {dredgers.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.name}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={trReportFilter.contractor}
+                  onChange={(e) => setTrReportFilter({ ...trReportFilter, contractor: e.target.value })}
+                  className="px-3 py-2 border rounded-lg text-sm"
+                >
+                  <option value="">All Contractors</option>
+                  {contractorOptions.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={trReportFilter.groupBy}
+                  onChange={(e) => setTrReportFilter({ ...trReportFilter, groupBy: e.target.value as any })}
+                  className="px-3 py-2 border rounded-lg text-sm"
+                >
+                  <option value="date">Group by Date</option>
+                  <option value="truckName">Group by Truck Name</option>
+                  <option value="plate">Group by Plate Number</option>
+                  <option value="dredger">Group by Dredger</option>
+                  <option value="contractor">Group by Contractor</option>
+                </select>
+                <button
+                  onClick={() =>
+                    setTrReportFilter({ start: "", end: "", plate: "", truckName: "", dredgerId: "", contractor: "", groupBy: "date" })
+                  }
+                  className="text-sm text-red-600 hover:text-red-800"
+                >
+                  Reset
+                </button>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-lg shadow">
+              <div className="p-4 border-b flex justify-between items-center">
+                <h3 className="font-bold text-lg">Grouped Results</h3>
+                <div className="text-sm text-gray-500">Grouping by {trReportFilter.groupBy}</div>
+              </div>
+              <div className="divide-y">
+                {transporterReportRows.map((group) => (
+                  <div key={group.key} className="p-4">
+                    <div className="flex justify-between items-center mb-3">
+                      <h4 className="font-semibold text-lg">{group.key || "(Unspecified)"}</h4>
+                      <div className="text-sm text-gray-600 space-x-3">
+                        <span>
+                          Trips: <strong>{group.totalTrips.toLocaleString()}</strong>
+                        </span>
+                        <span>
+                          Total CBM: <strong>{group.totalVolume.toLocaleString()}</strong>
+                        </span>
+                      </div>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-3 py-2 text-left">Date</th>
+                            <th className="px-3 py-2 text-left">Dredger</th>
+                            <th className="px-3 py-2 text-left">Transporter</th>
+                            <th className="px-3 py-2 text-left">Truck</th>
+                            <th className="px-3 py-2 text-right">Trips</th>
+                            <th className="px-3 py-2 text-right">Volume (CBM)</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {group.rows.map((row) => {
+                            const dredger = dredgers.find((d) => d.id === row.dredgerId);
+                            const transporter = transporters.find((t) => t.id === row.transporterId);
+                            const truck = transporter?.trucks.find((tr) => tr.id === row.truckId || tr.plateNumber === row.plateNumber);
+                            const capacityCbm = row.capacityCbm ?? truck?.capacityCbm ?? 0;
+                            const totalVolume = row.totalVolume ?? capacityCbm * (row.trips ?? 0);
+                            return (
+                              <tr key={row.id} className="border-t">
+                                <td className="px-3 py-2">{formatDisplayDate(row.date)}</td>
+                                <td className="px-3 py-2">{dredger?.name}</td>
+                                <td className="px-3 py-2">{transporter?.name}</td>
+                                <td className="px-3 py-2 font-mono text-xs">
+                                  {truck ? `${truck.truckName || ""} (${truck.plateNumber})` : row.plateNumber}
+                                </td>
+                                <td className="px-3 py-2 text-right">{row.trips}</td>
+                                <td className="px-3 py-2 text-right">{totalVolume.toLocaleString()}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                        <tfoot className="bg-gray-50 font-semibold">
+                          <tr>
+                            <td className="px-3 py-2" colSpan={4}>
+                              Group Totals
+                            </td>
+                            <td className="px-3 py-2 text-right">{group.totalTrips.toLocaleString()}</td>
+                            <td className="px-3 py-2 text-right">{group.totalVolume.toLocaleString()}</td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  </div>
+                ))}
+                {transporterReportRows.length === 0 && (
+                  <div className="p-6 text-center text-gray-500">No data for selected filters.</div>
+                )}
+              </div>
             </div>
           </div>
         )}
