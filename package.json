@@ -10,11 +10,11 @@
   },
   "dependencies": {
     "clsx": "2.1.1",
-    "date-fns": "^4.1.0",
-    "lucide-react": "^0.575.0",
+    "html2canvas": "^1.4.1",
+    "jspdf": "^4.2.0",
+    "lucide-react": "^0.577.0",
     "react": "19.2.3",
     "react-dom": "19.2.3",
-    "recharts": "^3.7.0",
     "tailwind-merge": "3.4.0",
     "xlsx": "^0.18.5"
   },
