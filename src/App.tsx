@@ -825,30 +825,34 @@ setTransporters(Array.from(transporterMap.values()));
 
 
   const deleteTruck = async (transporterId: string, truckId: string) => {
-    if (!confirm("Are you sure you want to delete this truck? This will delete it from Google Sheets.")) return;
+  if (!confirm("Are you sure you want to delete this truck?")) return;
 
-    const transporter = transporters.find((t) => t.id === transporterId);
-    const truck = transporter?.trucks.find((tr) => tr.id === truckId);
+  const transporter = transporters.find((t) => t.id === transporterId);
+  const truck = transporter?.trucks.find((tr) => tr.id === truckId);
 
-    if (!transporter || !truck) return;
+  if (!transporter || !truck) return;
 
-    setTransporters((prev) =>
-      prev.map((t) => {
-        if (t.id === transporterId) {
-          return { ...t, trucks: t.trucks.filter((tr) => tr.id !== truckId) };
-        }
-        return t;
-      })
-    );
+  // 1. Remove from local UI immediately
+  setTransporters((prev) =>
+    prev.map((t) => {
+      if (t.id === transporterId) {
+        return { ...t, trucks: t.trucks.filter((tr) => tr.id !== truckId) };
+      }
+      return t;
+    })
+  );
 
-    const actionData = {
-      Code: transporter.code,
-      PlateNumber: truck.plateNumber,
-    };
-
-    // Send delete to Apps Script and refresh after a short delay to confirm removal from Sheets
-    await submitToAppsScript("deleteTruck", actionData, () => {}, true);
+  // 2. Send to Apps Script
+  // We send 'code' and 'plateNumber' so the script knows exactly which row to kill
+  const actionData = { 
+    code: transporter.code, 
+    plateNumber: truck.plateNumber 
   };
+
+  submitToAppsScript("deleteTruck", actionData, () => {
+    console.log("Truck deleted from Google Sheets");
+  }, true);
+};
 
 
   // Download template
