@@ -1290,24 +1290,32 @@ const DredgingDashboard: React.FC = () => {
 
   // Helper: render a node to PDF (landscape, A4), respecting natural height across pages
   const renderNodeToPdf = async (node: HTMLElement, pdf: jsPDF) => {
-    const canvas = await html2canvas(node, { scale: 2, useCORS: true, backgroundColor: "#ffffff" });
+    const canvas = await html2canvas(node, {
+      scale: 2,
+      useCORS: true,
+      backgroundColor: "#ffffff",
+    });
     const imgData = canvas.toDataURL("image/png");
     const pageWidth = pdf.internal.pageSize.getWidth();
     const pageHeight = pdf.internal.pageSize.getHeight();
-    const imgWidth = pageWidth;
-    const imgHeight = (canvas.height * imgWidth) / canvas.width;
-    let position = 0;
-    let heightLeft = imgHeight;
 
-    pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
-    heightLeft -= pageHeight;
+    // Fit the entire section on a single page (landscape) to avoid row cuts.
+    const margin = 16; // small margin
+    const maxWidth = pageWidth - margin * 2;
+    const maxHeight = pageHeight - margin * 2;
 
-    while (heightLeft > 0) {
-      position = heightLeft - imgHeight;
-      pdf.addPage();
-      pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
-      heightLeft -= pageHeight;
+    let drawWidth = maxWidth;
+    let drawHeight = (canvas.height * drawWidth) / canvas.width;
+
+    if (drawHeight > maxHeight) {
+      drawHeight = maxHeight;
+      drawWidth = (canvas.width * drawHeight) / canvas.height;
     }
+
+    const x = (pageWidth - drawWidth) / 2;
+    const y = (pageHeight - drawHeight) / 2;
+
+    pdf.addImage(imgData, "PNG", x, y, drawWidth, drawHeight);
   };
 
   // Download PDF with page breaks per major section, hiding controls and borders
@@ -1328,6 +1336,7 @@ const DredgingDashboard: React.FC = () => {
         const node = section.ref.current;
         if (!node) continue;
         if (!first) pdf.addPage();
+        // Render each section scaled to fit one page so rows aren't split across pages
         await renderNodeToPdf(node, pdf);
         first = false;
       }
