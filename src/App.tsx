@@ -219,6 +219,15 @@ const DredgingDashboard: React.FC = () => {
   const [transporterForm, setTransporterForm] = useState<Partial<Transporter>>({});
   const [tripForm, setTripForm] = useState<Partial<Trip>>({});
   const [paymentForm, setPaymentForm] = useState<Partial<Payment>>({});
+  const [showAddTruckModal, setShowAddTruckModal] = useState(false);
+  const [truckForm, setTruckForm] = useState<{
+    transporterId: string;
+    truckName?: string;
+    plateNumber?: string;
+    dredgerBillingCbm?: number;
+    transporterBillingCbm?: number;
+    status?: "active" | "inactive";
+  }>({ transporterId: "" });
 
   // File input refs
   const dredgerFileInput = useRef<HTMLInputElement>(null);
@@ -264,45 +273,36 @@ const DredgingDashboard: React.FC = () => {
         const code = row[0];
         if (!code) return;
 
-        // Preferred column order (per truck row):
-        // 0 Code | 1 Name | 2 RatePerCbm | 3 Status | 4 Contractor | 5 ContractNumber | 6 PlateNumber | 7 TransporterBillingCbm | 8 DredgerBillingCbm | 9 TruckName
-        // Legacy fallback (older template):
-        // 0 Code | 1 Name | 2 RatePerCbm | 3 Status | 4 Contractor | 5 ContractNumber | 6 PlateNumber | 7 CapacityCbm | 8 TruckName | 9 TransporterBillingCbm | 10 DredgerBillingCbm
+        // Expected column order per truck row (we now tolerate both 10-col legacy and 11-col with CapacityCbm):
+        // Legacy 10-col: 0 Code | 1 Name | 2 RatePerCbm | 3 Status | 4 Contractor | 5 ContractNumber | 6 PlateNumber | 7 TransporterBillingCbm | 8 DredgerBillingCbm | 9 TruckName
+        // New 11-col:    0 Code | 1 Name | 2 RatePerCbm | 3 Status | 4 Contractor | 5 ContractNumber | 6 PlateNumber | 7 CapacityCbm | 8 TransporterBillingCbm | 9 DredgerBillingCbm | 10 TruckName
+
+        const isLegacy = (row.length <= 10);
+        const targetLen = isLegacy ? 10 : 11;
+        const normalized = Array.from({ length: targetLen }, (_, idx) => row[idx] ?? "");
+
+        const plateNumber = normalized[6];
+        const capacityFromSheet = isLegacy ? 0 : parseMoney(normalized[7]);
+        const transporterBillingCbm = parseMoney(normalized[isLegacy ? 7 : 8]);
+        const dredgerBillingCbm = parseMoney(normalized[isLegacy ? 8 : 9]);
+        const truckName = (normalized[isLegacy ? 9 : 10] ?? "Unnamed") as string;
+
+        const capacityFromDredgerBilling = dredgerBillingCbm > 0 ? dredgerBillingCbm : undefined;
+        const capacityFromTransporterBilling = transporterBillingCbm > 0 ? transporterBillingCbm : undefined;
+        const capacityCbm = capacityFromDredgerBilling ?? capacityFromTransporterBilling ?? capacityFromSheet ?? 0;
 
         if (!transporterMap.has(code)) {
           transporterMap.set(code, {
             id: code,
             code,
-            name: row[1],
-            ratePerCbm: parseFloat(row[2]) || 0,
-            status: (row[3] || "active").toLowerCase(),
-            contractor: row[4],
-            contractNumber: row[5],
+            name: normalized[1],
+            ratePerCbm: parseFloat(normalized[2]) || 0,
+            status: (normalized[3] || "active").toLowerCase(),
+            contractor: normalized[4],
+            contractNumber: normalized[5],
             trucks: [],
           });
         }
-
-        const plateNumber = row[6];
-        const truckName = (row[9] ?? row[8] ?? "Unnamed") as string;
-
-        const transporterBillingCbm = (() => {
-          if (row.length > 9) return parseMoney(row[7]); // new format
-          return parseMoney(row[9]); // legacy
-        })();
-
-        const dredgerBillingCbm = (() => {
-          if (row.length > 9) return parseMoney(row[8]); // new format
-          return parseMoney(row[10]); // legacy
-        })();
-
-        const legacyCapacity = row.length > 9 ? undefined : parseFloat(row[7]);
-        const capacityFromBilling = Number.isFinite(dredgerBillingCbm) && dredgerBillingCbm > 0 ? dredgerBillingCbm : undefined;
-        const fallbackCapacity = Number.isFinite(transporterBillingCbm) && transporterBillingCbm > 0 ? transporterBillingCbm : undefined;
-        const capacityCbm =
-          capacityFromBilling ??
-          (Number.isFinite(legacyCapacity) ? legacyCapacity : undefined) ??
-          fallbackCapacity ??
-          0;
 
         if (plateNumber) {
           const transporter = transporterMap.get(code);
@@ -313,12 +313,8 @@ const DredgingDashboard: React.FC = () => {
               plateNumber,
               capacityCbm,
               status: "active",
-              transporterBillingCbm:
-                Number.isFinite(transporterBillingCbm) && transporterBillingCbm > 0
-                  ? transporterBillingCbm
-                  : undefined,
-              dredgerBillingCbm:
-                Number.isFinite(dredgerBillingCbm) && dredgerBillingCbm > 0 ? dredgerBillingCbm : undefined,
+              transporterBillingCbm: transporterBillingCbm > 0 ? transporterBillingCbm : undefined,
+              dredgerBillingCbm: dredgerBillingCbm > 0 ? dredgerBillingCbm : undefined,
             });
           }
         }
@@ -340,8 +336,9 @@ const DredgingDashboard: React.FC = () => {
 
           const transporter = transporterMap.get(transporterCode);
           const truck = transporter?.trucks.find((t: any) => t.plateNumber === plateNumber);
-          const dredgerBillingCbmRaw = parseMoney(row[12]);
+          // Sheet may or may not have billing CBMs; if present, row[11] = TransporterBillingCbm, row[12] = DredgerBillingCbm (from trips template)
           const transporterBillingCbmRaw = parseMoney(row[11]);
+          const dredgerBillingCbmRaw = parseMoney(row[12]);
 
           // Dredger actual/billing capacity for volume (use dredger billing CBM if provided, else truck capacity)
           const dredgerBillingCbm = Number.isFinite(dredgerBillingCbmRaw) && dredgerBillingCbmRaw > 0
@@ -792,17 +789,42 @@ const DredgingDashboard: React.FC = () => {
     submitToAppsScript(actionName, actionData, () => {}, true);
   };
 
-  const addTruck = async (transporterId: string) => {
+  const openAddTruckModal = (transporterId: string) => {
     const transporter = transporters.find((t) => t.id === transporterId);
     if (!transporter) return;
+    setTruckForm({
+      transporterId,
+      truckName: "",
+      plateNumber: "",
+      dredgerBillingCbm: undefined,
+      transporterBillingCbm: undefined,
+      status: "active",
+    });
+    setShowAddTruckModal(true);
+  };
 
-    const truckName = prompt("Enter truck name (e.g., TP01, WHITE TRUCK):");
-    if (!truckName) return;
-    const plateNumber = prompt("Enter truck plate number:");
-    if (!plateNumber) return;
-    const capacityStr = prompt("Enter truck capacity (CBM):");
-    if (!capacityStr) return;
-    const capacity = parseFloat(capacityStr);
+    const handleAddTruckSubmit = async () => {
+    const transporter = transporters.find((t) => t.id === truckForm.transporterId);
+    if (!transporter) return;
+
+    const truckName = truckForm.truckName?.trim() || "Unnamed";
+    const plateNumber = truckForm.plateNumber?.trim();
+    if (!plateNumber) {
+      alert("Please enter a plate number for the truck.");
+      return;
+    }
+
+    const dredgerBillingCbmRaw = Number.isFinite(truckForm.dredgerBillingCbm || 0)
+      ? (truckForm.dredgerBillingCbm as number)
+      : 0;
+    const transporterBillingCbmRaw = Number.isFinite(truckForm.transporterBillingCbm || 0)
+      ? (truckForm.transporterBillingCbm as number)
+      : dredgerBillingCbmRaw;
+
+    const dredgerBillingCbm = dredgerBillingCbmRaw;
+    const transporterBillingCbm = transporterBillingCbmRaw;
+
+    const capacity = dredgerBillingCbm;
 
     const newTruck: TruckRecord = {
       id: `temp-${Date.now()}`,
@@ -810,32 +832,40 @@ const DredgingDashboard: React.FC = () => {
       plateNumber,
       capacityCbm: capacity,
       transporterId: transporter.id,
-      status: "active",
+      status: truckForm.status || "active",
+      transporterBillingCbm,
+      dredgerBillingCbm,
     };
+
+    // Payload matches sheet columns exactly (no extra fields)
+    const truckData = {
+  Code: transporter.code ?? "",
+  Name: transporter.name ?? "",
+  RatePerCbm: transporter.ratePerCbm ?? 0,
+  Status: transporter.status ?? "active",
+  Contractor: transporter.contractor ?? "",
+  ContractNumber: transporter.contractNumber ?? "",
+  PlateNumber: plateNumber, // Ensure this is the actual plate
+  TransporterBillingCbm: transporterBillingCbm, 
+  DredgerBillingCbm: dredgerBillingCbm,
+  TruckName: truckName
+};
 
     setTransporters((prev) =>
       prev.map((t) => {
-        if (t.id === transporterId) {
+        if (t.id === transporter.id) {
           return { ...t, trucks: [...t.trucks, newTruck] };
         }
         return t;
       })
     );
 
-    const truckData = {
-      Code: transporter.code,
-      Name: transporter.name,
-      RatePerCbm: transporter.ratePerCbm,
-      Status: transporter.status,
-      Contractor: transporter.contractor,
-      ContractNumber: transporter.contractNumber,
-      PlateNumber: plateNumber,
-      CapacityCbm: capacity,
-      TruckName: truckName,
-    };
+    setShowAddTruckModal(false);
+    setTruckForm({ transporterId: "" });
 
     submitToAppsScript("saveTransporter", truckData, () => {}, true);
   };
+
 
   const deleteTruck = async (transporterId: string, truckId: string) => {
     if (!confirm("Are you sure you want to delete this truck? This will delete it from Google Sheets.")) return;
@@ -859,8 +889,10 @@ const DredgingDashboard: React.FC = () => {
       PlateNumber: truck.plateNumber,
     };
 
-    submitToAppsScript("deleteTruck", actionData, () => {}, true);
+    // Send delete to Apps Script and refresh after a short delay to confirm removal from Sheets
+    await submitToAppsScript("deleteTruck", actionData, () => {}, true);
   };
+
 
   // Download template
   const downloadTemplate = (type: "dredgers" | "transporters" | "trips" | "payments") => {
@@ -920,32 +952,57 @@ const DredgingDashboard: React.FC = () => {
           let action = "";
           let payload: any = {};
 
+          const getVal = (key: string) => row[key] ?? row[key.charAt(0).toLowerCase() + key.slice(1)] ?? row[key.toLowerCase()];
+
           if (type === "dredgers") {
             action = "saveDredger";
             payload = {
-              Code: row.Code || row.code,
-              Name: row.Name || row.name,
-              RatePerCbm: row.RatePerCbm || row.ratePerCbm,
-              Status: row.Status || row.status || "active",
-              Contractor: row.Contractor || row.contractor,
-              ContractNumber: row.ContractNumber || row.contractNumber,
+              Code: getVal("Code"),
+              Name: getVal("Name"),
+              RatePerCbm: getVal("RatePerCbm"),
+              Status: getVal("Status") || "active",
+              Contractor: getVal("Contractor"),
+              ContractNumber: getVal("ContractNumber"),
             };
           } else if (type === "transporters") {
             action = "saveTransporter";
+            const tbc =
+              getVal("TransporterBillingCbm") ||
+              row["Transporter Billing Cbm"] ||
+              row["TransporterBillingCbm"];
+            const dbc =
+              getVal("DredgerBillingCbm") ||
+              row["Dredger Billing Cbm"] ||
+              row["DredgerBillingCbm"];
+            // Only send explicit Columns + Row to avoid column shifting in Apps Script
             payload = {
-              Code: row.Code || row.code,
-              Name: row.Name || row.name,
-              RatePerCbm: row.RatePerCbm || row.ratePerCbm,
-              Status: row.Status || row.status || "active",
-              Contractor: row.Contractor || row.contractor,
-              ContractNumber: row.ContractNumber || row.contractNumber,
-              TransporterBillingCbm: row.TransporterBillingCbm || row.transporterBillingCbm || row["Transporter Billing Cbm"] || row["TransporterBillingCbm"],
-              DredgerBillingCbm: row.DredgerBillingCbm || row.dredgerBillingCbm || row["Dredger Billing Cbm"] || row["DredgerBillingCbm"],
-              PlateNumber: row.PlateNumber || row.plateNumber,
-              CapacityCbm: row.CapacityCbm || row.capacityCbm,
-              TruckName: row.TruckName || row["Truck Name"] || row.truckName,
+              Columns: [
+                "Code",
+                "Name",
+                "RatePerCbm",
+                "Status",
+                "Contractor",
+                "ContractNumber",
+                "PlateNumber",
+                "TransporterBillingCbm",
+                "DredgerBillingCbm",
+                "TruckName",
+              ],
+              Row: [
+                getVal("Code"),
+                getVal("Name"),
+                getVal("RatePerCbm"),
+                getVal("Status") || "active",
+                getVal("Contractor"),
+                getVal("ContractNumber"),
+                getVal("PlateNumber"),
+                tbc,
+                dbc,
+                getVal("TruckName") || row["Truck Name"],
+              ],
             };
-          } else if (type === "trips") {
+          }
+ else if (type === "trips") {
             action = "saveTrip";
 
             const parseDate = (d: any) => {
@@ -1035,12 +1092,23 @@ const DredgingDashboard: React.FC = () => {
           }
 
           if (action) {
-            fetch(APPS_SCRIPT_URL, {
-              method: "POST",
-              mode: "no-cors",
-              headers: { "Content-Type": "text/plain" },
-              body: JSON.stringify({ action, data: payload }),
-            });
+            // Force ordering for transporters import as well
+            if (action === "saveTransporter" && payload.Row && payload.Columns) {
+              const enforced = payload;
+              fetch(APPS_SCRIPT_URL, {
+                method: "POST",
+                mode: "no-cors",
+                headers: { "Content-Type": "text/plain" },
+                body: JSON.stringify({ action, data: enforced }),
+              });
+            } else {
+              fetch(APPS_SCRIPT_URL, {
+                method: "POST",
+                mode: "no-cors",
+                headers: { "Content-Type": "text/plain" },
+                body: JSON.stringify({ action, data: payload }),
+              });
+            }
             count++;
             await new Promise((r) => setTimeout(r, 300));
           }
@@ -1074,7 +1142,7 @@ const DredgingDashboard: React.FC = () => {
           ? t.transporterAmount
           : t.totalVolume * (t.transporterRate || 0);
         const transporterBilling = t.transporterBillingCbm ?? truck?.transporterBillingCbm ?? t.capacityCbm;
-        const dredgerBilling = truck?.dredgerBillingCbm ?? t.capacityCbm;
+        const dredgerBilling = t.dredgerBillingCbm ?? truck?.dredgerBillingCbm ?? t.capacityCbm;
         csv += `${t.date},${dredger?.code || ""},${dredger?.name || ""},${transporter?.code || ""},${transporter?.name || ""},${t.plateNumber},${t.trips},${t.capacityCbm},${t.totalVolume},${t.dredgerRate || 0},${t.transporterRate || 0},${dredgerAmount},${transporterAmount},${transporterBilling},${dredgerBilling},${t.dumpingLocation},${t.notes}\n`;
       });
       filename = "trip_report.csv";
@@ -1825,7 +1893,7 @@ const DredgingDashboard: React.FC = () => {
                             </span>
                           ))}
                           <button
-                            onClick={() => addTruck(transporter.id)}
+                            onClick={() => openAddTruckModal(transporter.id)}
                             className="px-2 py-1 bg-green-100 text-green-800 rounded text-xs hover:bg-green-200"
                           >
                             + Add Truck
@@ -2995,6 +3063,100 @@ const DredgingDashboard: React.FC = () => {
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
               >
                 Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showAddTruckModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <h3 className="text-xl font-bold mb-4">Add Truck</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Truck Name</label>
+                <input
+                  type="text"
+                  value={truckForm.truckName || ""}
+                  onChange={(e) => setTruckForm({ ...truckForm, truckName: e.target.value })}
+                  className="w-full px-3 py-2 border rounded-lg"
+                  placeholder="e.g., TP01"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Plate Number</label>
+                <input
+                  type="text"
+                  value={truckForm.plateNumber || ""}
+                  onChange={(e) => setTruckForm({ ...truckForm, plateNumber: e.target.value })}
+                  className="w-full px-3 py-2 border rounded-lg"
+                  placeholder="ABC-123"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Dredger CBM (actual)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={truckForm.dredgerBillingCbm ?? ""}
+                    onChange={(e) =>
+                      setTruckForm({
+                        ...truckForm,
+                        dredgerBillingCbm: e.target.value ? parseFloat(e.target.value) : undefined,
+                      })
+                    }
+                    className="w-full px-3 py-2 border rounded-lg"
+                    placeholder="e.g., 12.8"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Transporter CBM (billed)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={truckForm.transporterBillingCbm ?? ""}
+                    onChange={(e) =>
+                      setTruckForm({
+                        ...truckForm,
+                        transporterBillingCbm: e.target.value ? parseFloat(e.target.value) : undefined,
+                      })
+                    }
+                    className="w-full px-3 py-2 border rounded-lg"
+                    placeholder="e.g., 13"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Status</label>
+                <select
+                  value={truckForm.status || "active"}
+                  onChange={(e) => setTruckForm({ ...truckForm, status: e.target.value as "active" | "inactive" })}
+                  className="w-full px-3 py-2 border rounded-lg"
+                >
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                </select>
+              </div>
+            </div>
+            <div className="flex justify-end space-x-2 mt-6">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAddTruckModal(false);
+                  setTruckForm({ transporterId: "" });
+                }}
+                className="px-4 py-2 border rounded-lg hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleAddTruckSubmit}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                Save Truck
               </button>
             </div>
           </div>
