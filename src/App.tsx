@@ -13,6 +13,8 @@ import {
   Activity,
 } from "lucide-react";
 import * as XLSX from "xlsx";
+import jsPDF from "jspdf";
+import html2canvas from "html2canvas";
 
 // Custom Naira Icon Component
 const NairaIcon: React.FC<{ className?: string }> = ({ className = "w-6 h-6" }) => (
@@ -224,7 +226,7 @@ const DredgingDashboard: React.FC = () => {
   const [dredgerForm, setDredgerForm] = useState<Partial<Dredger>>({});
   const [transporterForm, setTransporterForm] = useState<Partial<Transporter>>({});
   const [tripForm, setTripForm] = useState<Partial<Trip>>({});
-  const [paymentForm, setPaymentForm] = useState<Partial<Payment>>({});
+  const [paymentForm, setPaymentForm] = useState<Partial<Payment>>({ entityType: "dredger" });
   const [showAddTruckModal, setShowAddTruckModal] = useState(false);
   const [truckForm, setTruckForm] = useState<{
     transporterId: string;
@@ -1277,6 +1279,32 @@ const DredgingDashboard: React.FC = () => {
 
   const formatCurrency = (amount: number) => `₦${amount.toLocaleString()}`;
 
+  const downloadReportsAsPdf = async () => {
+    const reportsNode = document.getElementById("reports-section");
+    if (!reportsNode) return;
+    const canvas = await html2canvas(reportsNode, { scale: 2, useCORS: true });
+    const imgData = canvas.toDataURL("image/png");
+    const pdf = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const imgWidth = pageWidth;
+    const imgHeight = (canvas.height * pageWidth) / canvas.width;
+    let position = 0;
+    let heightLeft = imgHeight;
+
+    pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
+    heightLeft -= pageHeight;
+
+    while (heightLeft > 0) {
+      position = heightLeft - imgHeight;
+      pdf.addPage();
+      pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
+      heightLeft -= pageHeight;
+    }
+
+    pdf.save("reports.pdf");
+  };
+
   return (
     <div className="min-h-screen bg-gray-100">
       {/* Header */}
@@ -2162,6 +2190,30 @@ const DredgingDashboard: React.FC = () => {
             </div>
 
             <div className="bg-white rounded-lg shadow overflow-hidden">
+              <div className="px-4 py-3 bg-gray-50 flex flex-wrap gap-3 items-center">
+                <div className="text-sm font-medium text-gray-700">Filter:</div>
+                <select
+                  value={paymentForm.entityType ?? "dredger"}
+                  onChange={(e) => setPaymentForm({ ...paymentForm, entityType: (e.target.value as "dredger" | "transporter") || "dredger" })}
+                  className="px-3 py-2 border rounded-lg text-sm"
+                >
+                  <option value="dredger">Dredger</option>
+                  <option value="transporter">Transporter</option>
+                </select>
+                <input
+                  type="text"
+                  placeholder="Search entity code/name"
+                  value={paymentForm.entityId || ""}
+                  onChange={(e) => setPaymentForm({ ...paymentForm, entityId: e.target.value })}
+                  className="px-3 py-2 border rounded-lg text-sm"
+                />
+                <button
+                  onClick={() => setPaymentForm({ ...paymentForm, entityType: undefined, entityId: "" })}
+                  className="text-sm text-red-600 hover:text-red-800"
+                >
+                  Clear
+                </button>
+              </div>
               <table className="w-full">
                 <thead className="bg-gray-50">
                   <tr>
@@ -2176,19 +2228,39 @@ const DredgingDashboard: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {sortedPayments.map((payment) => {
-                    let entityName = "";
-                    if (payment.entityType === "dredger") {
-                      const dr = dredgers.find((d) => d.id === payment.entityId || d.code === payment.entityId);
-                      entityName = dr?.name || payment.entityId || "";
-                    } else {
-                      const matchedByCode = transporters.find((t) => t.code === payment.entityId || t.id === payment.entityId);
-                      if (matchedByCode && matchedByCode.contractor) {
-                        entityName = matchedByCode.contractor.trim();
+                  {sortedPayments
+                    .filter((p) => {
+                      if (!paymentForm.entityType && !(paymentForm as any).filterEntity && !paymentForm.entityId) return true;
+                      const typeMatch = paymentForm.entityType ? p.entityType === paymentForm.entityType : true;
+                      const entityQuery = (paymentForm.entityId || "").trim().toLowerCase();
+                      const entityName = (() => {
+                        if (p.entityType === "dredger") {
+                          const dr = dredgers.find((d) => d.id === p.entityId || d.code === p.entityId);
+                          return dr?.name || p.entityId || "";
+                        }
+                        const tr = transporters.find((t) => t.code === p.entityId || t.id === p.entityId);
+                        return tr?.name || tr?.contractor || p.entityId || "";
+                      })()
+                        .toLowerCase();
+                      const entityCode = p.entityId?.toLowerCase() || "";
+                      const entityMatch = entityQuery
+                        ? entityName.includes(entityQuery) || entityCode.includes(entityQuery)
+                        : true;
+                      return typeMatch && entityMatch;
+                    })
+                    .map((payment) => {
+                      let entityName = "";
+                      if (payment.entityType === "dredger") {
+                        const dr = dredgers.find((d) => d.id === payment.entityId || d.code === payment.entityId);
+                        entityName = dr?.name || payment.entityId || "";
                       } else {
-                        entityName = payment.entityId || "";
+                        const matchedByCode = transporters.find((t) => t.code === payment.entityId || t.id === payment.entityId);
+                        if (matchedByCode && matchedByCode.contractor) {
+                          entityName = matchedByCode.contractor.trim();
+                        } else {
+                          entityName = payment.entityId || "";
+                        }
                       }
-                    }
 
                     return (
                       <tr key={payment.id} className="border-t hover:bg-gray-50">
@@ -2216,8 +2288,8 @@ const DredgingDashboard: React.FC = () => {
                                 setEditingItem(payment);
                                 setPaymentForm({
                                   ...payment,
-                                  // normalize to YYYY-MM-DD for the date input
-                                  date: toSortableISO(payment.date || "") || payment.date || new Date().toISOString().split("T")[0],
+                                  date:
+                                    toSortableISO(payment.date || "") || payment.date || new Date().toISOString().split("T")[0],
                                 });
                                 setShowPaymentModal(true);
                               }}
@@ -2395,38 +2467,46 @@ const DredgingDashboard: React.FC = () => {
 
         {/* Reports Tab */}
         {activeTab === "reports" && (
-          <div className="space-y-6">
-            <h2 className="text-2xl font-bold">Comprehensive Reports</h2>
-
-            <div className="flex space-x-2 flex-wrap gap-2">
-              <button
-                onClick={() => exportToExcel("trips")}
-                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center space-x-2"
-              >
-                <Download className="w-5 h-5" />
-                <span>Export Trips</span>
-              </button>
-              <button
-                onClick={() => exportToExcel("dredgers")}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2"
-              >
-                <Download className="w-5 h-5" />
-                <span>Export Dredgers</span>
-              </button>
-              <button
-                onClick={() => exportToExcel("transporters")}
-                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center space-x-2"
-              >
-                <Download className="w-5 h-5" />
-                <span>Export Transporters</span>
-              </button>
-              <button
-                onClick={() => exportToExcel("payments")}
-                className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 flex items-center space-x-2"
-              >
-                <Download className="w-5 h-5" />
-                <span>Export Payments</span>
-              </button>
+          <div className="space-y-6" id="reports-section">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h2 className="text-2xl font-bold">Comprehensive Reports</h2>
+              <div className="flex space-x-2 flex-wrap gap-2">
+                <button
+                  onClick={() => exportToExcel("trips")}
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center space-x-2"
+                >
+                  <Download className="w-5 h-5" />
+                  <span>Export Trips</span>
+                </button>
+                <button
+                  onClick={() => exportToExcel("dredgers")}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2"
+                >
+                  <Download className="w-5 h-5" />
+                  <span>Export Dredgers</span>
+                </button>
+                <button
+                  onClick={() => exportToExcel("transporters")}
+                  className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center space-x-2"
+                >
+                  <Download className="w-5 h-5" />
+                  <span>Export Transporters</span>
+                </button>
+                <button
+                  onClick={() => exportToExcel("payments")}
+                  className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 flex items-center space-x-2"
+                >
+                  <Download className="w-5 h-5" />
+                  <span>Export Payments</span>
+                </button>
+                <button
+                  onClick={() => downloadReportsAsPdf()}
+                  className="px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-900 flex items-center space-x-2"
+                >
+                  <Download className="w-5 h-5" />
+                  <span>Download PDF</span>
+                </button>
+              </div>
             </div>
 
             <div className="bg-white rounded-lg shadow p-6">
