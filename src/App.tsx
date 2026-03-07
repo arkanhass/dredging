@@ -175,6 +175,12 @@ const matchesWholeWord = (value: string, query: string) => {
   return pattern.test(value.trim());
 };
 
+const formatDateSlash = (iso: string): string => {
+  if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return "";
+  const [y, m, d] = iso.split("-");
+  return `${d}/${m}/${y}`;
+};
+
 const DredgingDashboard: React.FC = () => {
   // State
   const [activeTab, setActiveTab] = useState<
@@ -262,50 +268,50 @@ const DredgingDashboard: React.FC = () => {
       setDredgers(loadedDredgers);
 
       // 2. Load Transporters & Trucks (Revised for 10-column layout)
-const trRes = await fetch(
-  `https://sheets.googleapis.com/v4/spreadsheets/${GOOGLE_SHEETS_CONFIG.spreadsheetId}/values/Transporters?key=${GOOGLE_SHEETS_CONFIG.apiKey}`
-);
-const trData = await trRes.json();
-const trRows = trData.values || [];
-const transporterMap = new Map<string, any>();
+      const trRes = await fetch(
+        `https://sheets.googleapis.com/v4/spreadsheets/${GOOGLE_SHEETS_CONFIG.spreadsheetId}/values/Transporters?key=${GOOGLE_SHEETS_CONFIG.apiKey}`
+      );
+      const trData = await trRes.json();
+      const trRows = trData.values || [];
+      const transporterMap = new Map<string, any>();
 
-trRows.slice(1).forEach((row: any[]) => {
-  const code = row[0];
-  if (!code) return;
+      trRows.slice(1).forEach((row: any[]) => {
+        const code = row[0];
+        if (!code) return;
 
-  // Header Order: 0:Code | 1:Name | 2:Rate | 3:Status | 4:Contractor | 5:ContractNumber | 6:PlateNumber | 7:TransporterBillingCbm | 8:DredgerBillingCbm | 9:TruckName
-  const plateNumber = row[6] || "";
-  const tBilling = parseMoney(row[7]);
-  const dBilling = parseMoney(row[8]);
-  const truckName = row[9] || "Unnamed";
+        // Header Order: 0:Code | 1:Name | 2:Rate | 3:Status | 4:Contractor | 5:ContractNumber | 6:PlateNumber | 7:TransporterBillingCbm | 8:DredgerBillingCbm | 9:TruckName
+        const plateNumber = row[6] || "";
+        const tBilling = parseMoney(row[7]);
+        const dBilling = parseMoney(row[8]);
+        const truckName = row[9] || "Unnamed";
 
-  if (!transporterMap.has(code)) {
-    transporterMap.set(code, {
-      id: code,
-      code,
-      name: row[1],
-      ratePerCbm: parseFloat(row[2]) || 0,
-      status: (row[3] || "active").toLowerCase(),
-      contractor: row[4],
-      contractNumber: row[5],
-      trucks: [],
-    });
-  }
+        if (!transporterMap.has(code)) {
+          transporterMap.set(code, {
+            id: code,
+            code,
+            name: row[1],
+            ratePerCbm: parseFloat(row[2]) || 0,
+            status: (row[3] || "active").toLowerCase(),
+            contractor: row[4],
+            contractNumber: row[5],
+            trucks: [],
+          });
+        }
 
-  if (plateNumber) {
-    const transporter = transporterMap.get(code);
-    transporter.trucks.push({
-      id: `${code}-${plateNumber}`,
-      truckName,
-      plateNumber,
-      capacityCbm: dBilling || tBilling || 0, // Fallback logic
-      status: "active",
-      transporterBillingCbm: tBilling,
-      dredgerBillingCbm: dBilling,
-    });
-  }
-});
-setTransporters(Array.from(transporterMap.values()));
+        if (plateNumber) {
+          const transporter = transporterMap.get(code);
+          transporter.trucks.push({
+            id: `${code}-${plateNumber}`,
+            truckName,
+            plateNumber,
+            capacityCbm: dBilling || tBilling || 0, // Fallback logic
+            status: "active",
+            transporterBillingCbm: tBilling,
+            dredgerBillingCbm: dBilling,
+          });
+        }
+      });
+      setTransporters(Array.from(transporterMap.values()));
 
       // 3. Load Trips
       const tripRes = await fetch(
@@ -444,20 +450,20 @@ setTransporters(Array.from(transporterMap.values()));
     const contractorName = transporter?.contractor?.trim() || "";
 
     const transporterTrips = tripsData.filter((t) => t.transporterId === transporterId);
-      const totalTrips = transporterTrips.reduce((sum, t) => sum + (t.trips || 0), 0);
-      const totalVolume = transporterTrips.reduce((sum, t) => {
-        const vol = Number.isFinite(t.totalVolume)
-          ? t.totalVolume
-          : (t.capacityCbm || 0) * (t.trips || 0);
-        return sum + vol;
-      }, 0);
-      const totalAmount = transporterTrips.reduce((sum, t) => {
-        const billedCbm =
-          t.transporterBillingCbm && t.transporterBillingCbm > 0 ? t.transporterBillingCbm : t.capacityCbm || 0;
-        const amtFromSheet = Number.isFinite(t.transporterAmount) ? t.transporterAmount : undefined;
-        const fallbackAmt = (t.trips || 0) * billedCbm * (t.transporterRate || 0);
-        return sum + (amtFromSheet ?? fallbackAmt);
-      }, 0);
+    const totalTrips = transporterTrips.reduce((sum, t) => sum + (t.trips || 0), 0);
+    const totalVolume = transporterTrips.reduce((sum, t) => {
+      const vol = Number.isFinite(t.totalVolume)
+        ? t.totalVolume
+        : (t.capacityCbm || 0) * (t.trips || 0);
+      return sum + vol;
+    }, 0);
+    const totalAmount = transporterTrips.reduce((sum, t) => {
+      const billedCbm =
+        t.transporterBillingCbm && t.transporterBillingCbm > 0 ? t.transporterBillingCbm : t.capacityCbm || 0;
+      const amtFromSheet = Number.isFinite(t.transporterAmount) ? t.transporterAmount : undefined;
+      const fallbackAmt = (t.trips || 0) * billedCbm * (t.transporterRate || 0);
+      return sum + (amtFromSheet ?? fallbackAmt);
+    }, 0);
 
     const totalPaid = paymentsData
       .filter((p) => {
@@ -475,7 +481,7 @@ setTransporters(Array.from(transporterMap.values()));
     };
   };
 
-    const overallStats = {
+  const overallStats = {
     totalVolume: dashboardTrips.reduce((sum, t) => sum + (t.totalVolume ?? 0), 0),
     totalTrips: dashboardTrips.reduce((sum, t) => sum + (t.trips || 0), 0),
     totalDredgerCost: dashboardTrips.reduce((sum, t) => {
@@ -494,6 +500,17 @@ setTransporters(Array.from(transporterMap.values()));
     totalTransporterVolumeMoney: dashboardTrips.reduce((sum, t) => sum + (t.transporterAmount || 0), 0),
     totalPaid: dashboardPayments.reduce((sum, p) => sum + p.amount, 0),
   };
+
+  // Latest trip date (ISO) for dashboard header
+  const latestTripIso = React.useMemo(() => {
+    const isoDates = trips
+      .map((t) => toSortableISO(t.date))
+      .filter((d) => d && /^\d{4}-\d{2}-\d{2}$/.test(d));
+    if (!isoDates.length) return "";
+    return isoDates.reduce((max, cur) => (cur > max ? cur : max), isoDates[0]);
+  }, [trips]);
+
+  const latestTripDisplay = latestTripIso ? formatDateSlash(latestTripIso) : "";
 
 
   // Google Apps Script URL
@@ -789,70 +806,95 @@ setTransporters(Array.from(transporterMap.values()));
     setShowAddTruckModal(true);
   };
 
-   const handleAddTruckSubmit = async () => {
-  const transporter = transporters.find((t) => t.id === truckForm.transporterId);
-  if (!transporter || !truckForm.plateNumber) return;
+  const handleAddTruckSubmit = async () => {
+    const transporter = transporters.find((t) => t.id === truckForm.transporterId);
+    if (!transporter || !truckForm.plateNumber) return;
 
-  const tBilling = Number(truckForm.transporterBillingCbm) || 0;
-  const dBilling = Number(truckForm.dredgerBillingCbm) || 0;
+    const tBilling = Number(truckForm.transporterBillingCbm) || 0;
+    const dBilling = Number(truckForm.dredgerBillingCbm) || 0;
 
-  const truckData = {
-    Code: transporter.code,
-    Name: transporter.name,
-    RatePerCbm: transporter.ratePerCbm,
-    Status: transporter.status,
-    Contractor: transporter.contractor,
-    ContractNumber: transporter.contractNumber,
-    PlateNumber: truckForm.plateNumber.trim(),
-    TransporterBillingCbm: tBilling,
-    DredgerBillingCbm: dBilling,
-    TruckName: truckForm.truckName?.trim() || "Unnamed"
+    const truckData = {
+      Code: transporter.code,
+      Name: transporter.name,
+      RatePerCbm: transporter.ratePerCbm,
+      Status: transporter.status,
+      Contractor: transporter.contractor,
+      ContractNumber: transporter.contractNumber,
+      PlateNumber: truckForm.plateNumber.trim(),
+      TransporterBillingCbm: tBilling,
+      DredgerBillingCbm: dBilling,
+      TruckName: truckForm.truckName?.trim() || "Unnamed",
+    };
+
+    setTransporters((prev) =>
+      prev.map((t) =>
+        t.id === transporter.id
+          ? {
+              ...t,
+              trucks: [
+                ...t.trucks,
+                {
+                  ...truckData,
+                  id: `${t.code}-${truckData.PlateNumber}`,
+                  capacityCbm: dBilling,
+                  transporterId: t.id,
+                  status: truckForm.status || "active",
+                  transporterBillingCbm: tBilling,
+                  dredgerBillingCbm: dBilling,
+                  plateNumber: truckData.PlateNumber,
+                  truckName: truckData.TruckName,
+                } as TruckRecord,
+              ],
+            }
+          : t
+      )
+    );
+
+    setShowAddTruckModal(false);
+    submitToAppsScript(
+      "saveTransporter",
+      truckData,
+      () => {
+        console.log("Truck saved to sheet");
+      },
+      true
+    );
   };
-
-  // Optimistic UI Update
-  setTransporters((prev) =>
-    prev.map((t) => (t.id === transporter.id ? { 
-      ...t, 
-      trucks: [...t.trucks, { ...truckData, id: `${t.code}-${truckData.PlateNumber}`, capacityCbm: dBilling } as any] 
-    } : t))
-  );
-
-  setShowAddTruckModal(false);
-  submitToAppsScript("saveTransporter", truckData, () => {
-    console.log("Truck saved to sheet");
-  }, true);
-};
 
 
   const deleteTruck = async (transporterId: string, truckId: string) => {
-  if (!confirm("Are you sure you want to delete this truck?")) return;
+    if (!confirm("Are you sure you want to delete this truck?")) return;
 
-  const transporter = transporters.find((t) => t.id === transporterId);
-  const truck = transporter?.trucks.find((tr) => tr.id === truckId);
+    const transporter = transporters.find((t) => t.id === transporterId);
+    const truck = transporter?.trucks.find((tr) => tr.id === truckId);
 
-  if (!transporter || !truck) return;
+    if (!transporter || !truck) return;
 
-  // 1. Remove from local UI immediately
-  setTransporters((prev) =>
-    prev.map((t) => {
-      if (t.id === transporterId) {
-        return { ...t, trucks: t.trucks.filter((tr) => tr.id !== truckId) };
-      }
-      return t;
-    })
-  );
+    // Optimistic UI removal
+    setTransporters((prev) =>
+      prev.map((t) => {
+        if (t.id === transporterId) {
+          return { ...t, trucks: t.trucks.filter((tr) => tr.id !== truckId) };
+        }
+        return t;
+      })
+    );
 
-  // 2. Send to Apps Script
-  // We send 'code' and 'plateNumber' so the script knows exactly which row to kill
-  const actionData = { 
-    code: transporter.code, 
-    plateNumber: truck.plateNumber 
+    // Send exact code + plateNumber to Apps Script (10-column layout: PlateNumber is column 6 / index 6)
+    const actionData = {
+      code: transporter.code,
+      plateNumber: truck.plateNumber,
+    };
+
+    submitToAppsScript(
+      "deleteTruck",
+      actionData,
+      () => {
+        console.log("Truck deleted from Google Sheets");
+      },
+      true
+    );
   };
-
-  submitToAppsScript("deleteTruck", actionData, () => {
-    console.log("Truck deleted from Google Sheets");
-  }, true);
-};
 
 
   // Download template
@@ -927,40 +969,30 @@ setTransporters(Array.from(transporterMap.values()));
             };
           } else if (type === "transporters") {
             action = "saveTransporter";
-            const tbc =
-              getVal("TransporterBillingCbm") ||
-              row["Transporter Billing Cbm"] ||
-              row["TransporterBillingCbm"];
-            const dbc =
-              getVal("DredgerBillingCbm") ||
-              row["Dredger Billing Cbm"] ||
-              row["DredgerBillingCbm"];
-            // Only send explicit Columns + Row to avoid column shifting in Apps Script
+            // Explicit row/order to match sheet: Code, Name, RatePerCbm, Status, Contractor, ContractNumber, PlateNumber, TransporterBillingCbm, DredgerBillingCbm, TruckName
+              const rowOrdered = [
+              getVal("Code"),
+              getVal("Name"),
+              getVal("RatePerCbm"),
+              getVal("Status") || "active",
+              getVal("Contractor"),
+              getVal("ContractNumber"),
+              getVal("PlateNumber"),
+              getVal("TransporterBillingCbm") || row["Transporter Billing Cbm"],
+              getVal("DredgerBillingCbm") || row["Dredger Billing Cbm"],
+              getVal("TruckName") || row["Truck Name"],
+            ];
             payload = {
-              Columns: [
-                "Code",
-                "Name",
-                "RatePerCbm",
-                "Status",
-                "Contractor",
-                "ContractNumber",
-                "PlateNumber",
-                "TransporterBillingCbm",
-                "DredgerBillingCbm",
-                "TruckName",
-              ],
-              Row: [
-                getVal("Code"),
-                getVal("Name"),
-                getVal("RatePerCbm"),
-                getVal("Status") || "active",
-                getVal("Contractor"),
-                getVal("ContractNumber"),
-                getVal("PlateNumber"),
-                tbc,
-                dbc,
-                getVal("TruckName") || row["Truck Name"],
-              ],
+              Code: rowOrdered[0],
+              Name: rowOrdered[1],
+              RatePerCbm: rowOrdered[2],
+              Status: rowOrdered[3],
+              Contractor: rowOrdered[4],
+              ContractNumber: rowOrdered[5],
+              PlateNumber: rowOrdered[6],
+              TransporterBillingCbm: rowOrdered[7],
+              DredgerBillingCbm: rowOrdered[8],
+              TruckName: rowOrdered[9],
             };
           }
  else if (type === "trips") {
@@ -1053,23 +1085,12 @@ setTransporters(Array.from(transporterMap.values()));
           }
 
           if (action) {
-            // Force ordering for transporters import as well
-            if (action === "saveTransporter" && payload.Row && payload.Columns) {
-              const enforced = payload;
-              fetch(APPS_SCRIPT_URL, {
-                method: "POST",
-                mode: "no-cors",
-                headers: { "Content-Type": "text/plain" },
-                body: JSON.stringify({ action, data: enforced }),
-              });
-            } else {
-              fetch(APPS_SCRIPT_URL, {
-                method: "POST",
-                mode: "no-cors",
-                headers: { "Content-Type": "text/plain" },
-                body: JSON.stringify({ action, data: payload }),
-              });
-            }
+            fetch(APPS_SCRIPT_URL, {
+              method: "POST",
+              mode: "no-cors",
+              headers: { "Content-Type": "text/plain" },
+              body: JSON.stringify({ action, data: payload }),
+            });
             count++;
             await new Promise((r) => setTimeout(r, 300));
           }
@@ -1309,7 +1330,12 @@ setTransporters(Array.from(transporterMap.values()));
         {activeTab === "dashboard" && (
           <div className="space-y-6">
             <div className="bg-white p-4 rounded-lg shadow-sm flex flex-wrap items-center justify-between gap-4">
-              <h2 className="text-lg font-bold text-gray-700">Project Overview</h2>
+              <div className="flex items-center space-x-3">
+                <h2 className="text-lg font-bold text-gray-700">Project Overview</h2>
+                {latestTripDisplay && (
+                  <span className="text-sm text-gray-500">— up to {latestTripDisplay}</span>
+                )}
+              </div>
               <div className="flex items-center space-x-2">
                 <span className="text-sm text-gray-600 font-medium">Filter Range:</span>
                 <input
@@ -1403,7 +1429,7 @@ setTransporters(Array.from(transporterMap.values()));
                   </button>
                 </div>
                 <div className="overflow-x-auto">
-                  <table className="w-full">
+                  <table className="w-full min-w-[760px]">
                     <thead className="bg-gray-50">
                       <tr>
                         <th className="px-4 py-2 text-left text-sm font-medium text-gray-600">Dredger</th>
