@@ -261,65 +261,51 @@ const DredgingDashboard: React.FC = () => {
         .filter((d: any) => d.code);
       setDredgers(loadedDredgers);
 
-      // 2. Load Transporters & Trucks
-      const trRes = await fetch(
-        `https://sheets.googleapis.com/v4/spreadsheets/${GOOGLE_SHEETS_CONFIG.spreadsheetId}/values/Transporters?key=${GOOGLE_SHEETS_CONFIG.apiKey}`
-      );
-      const trData = await trRes.json();
-      const trRows = trData.values || [];
-      const transporterMap = new Map<string, any>();
+      // 2. Load Transporters & Trucks (Revised for 10-column layout)
+const trRes = await fetch(
+  `https://sheets.googleapis.com/v4/spreadsheets/${GOOGLE_SHEETS_CONFIG.spreadsheetId}/values/Transporters?key=${GOOGLE_SHEETS_CONFIG.apiKey}`
+);
+const trData = await trRes.json();
+const trRows = trData.values || [];
+const transporterMap = new Map<string, any>();
 
-      trRows.slice(1).forEach((row: any[]) => {
-        const code = row[0];
-        if (!code) return;
+trRows.slice(1).forEach((row: any[]) => {
+  const code = row[0];
+  if (!code) return;
 
-        // Expected column order per truck row (we now tolerate both 10-col legacy and 11-col with CapacityCbm):
-        // Legacy 10-col: 0 Code | 1 Name | 2 RatePerCbm | 3 Status | 4 Contractor | 5 ContractNumber | 6 PlateNumber | 7 TransporterBillingCbm | 8 DredgerBillingCbm | 9 TruckName
-        // New 11-col:    0 Code | 1 Name | 2 RatePerCbm | 3 Status | 4 Contractor | 5 ContractNumber | 6 PlateNumber | 7 CapacityCbm | 8 TransporterBillingCbm | 9 DredgerBillingCbm | 10 TruckName
+  // Header Order: 0:Code | 1:Name | 2:Rate | 3:Status | 4:Contractor | 5:ContractNumber | 6:PlateNumber | 7:TransporterBillingCbm | 8:DredgerBillingCbm | 9:TruckName
+  const plateNumber = row[6] || "";
+  const tBilling = parseMoney(row[7]);
+  const dBilling = parseMoney(row[8]);
+  const truckName = row[9] || "Unnamed";
 
-        const isLegacy = (row.length <= 10);
-        const targetLen = isLegacy ? 10 : 11;
-        const normalized = Array.from({ length: targetLen }, (_, idx) => row[idx] ?? "");
+  if (!transporterMap.has(code)) {
+    transporterMap.set(code, {
+      id: code,
+      code,
+      name: row[1],
+      ratePerCbm: parseFloat(row[2]) || 0,
+      status: (row[3] || "active").toLowerCase(),
+      contractor: row[4],
+      contractNumber: row[5],
+      trucks: [],
+    });
+  }
 
-        const plateNumber = normalized[6];
-        const capacityFromSheet = isLegacy ? 0 : parseMoney(normalized[7]);
-        const transporterBillingCbm = parseMoney(normalized[isLegacy ? 7 : 8]);
-        const dredgerBillingCbm = parseMoney(normalized[isLegacy ? 8 : 9]);
-        const truckName = (normalized[isLegacy ? 9 : 10] ?? "Unnamed") as string;
-
-        const capacityFromDredgerBilling = dredgerBillingCbm > 0 ? dredgerBillingCbm : undefined;
-        const capacityFromTransporterBilling = transporterBillingCbm > 0 ? transporterBillingCbm : undefined;
-        const capacityCbm = capacityFromDredgerBilling ?? capacityFromTransporterBilling ?? capacityFromSheet ?? 0;
-
-        if (!transporterMap.has(code)) {
-          transporterMap.set(code, {
-            id: code,
-            code,
-            name: normalized[1],
-            ratePerCbm: parseFloat(normalized[2]) || 0,
-            status: (normalized[3] || "active").toLowerCase(),
-            contractor: normalized[4],
-            contractNumber: normalized[5],
-            trucks: [],
-          });
-        }
-
-        if (plateNumber) {
-          const transporter = transporterMap.get(code);
-          if (!transporter.trucks.find((t: any) => t.plateNumber === plateNumber)) {
-            transporter.trucks.push({
-              id: `${code}-${plateNumber}`,
-              truckName,
-              plateNumber,
-              capacityCbm,
-              status: "active",
-              transporterBillingCbm: transporterBillingCbm > 0 ? transporterBillingCbm : undefined,
-              dredgerBillingCbm: dredgerBillingCbm > 0 ? dredgerBillingCbm : undefined,
-            });
-          }
-        }
-      });
-      setTransporters(Array.from(transporterMap.values()));
+  if (plateNumber) {
+    const transporter = transporterMap.get(code);
+    transporter.trucks.push({
+      id: `${code}-${plateNumber}`,
+      truckName,
+      plateNumber,
+      capacityCbm: dBilling || tBilling || 0, // Fallback logic
+      status: "active",
+      transporterBillingCbm: tBilling,
+      dredgerBillingCbm: dBilling,
+    });
+  }
+});
+setTransporters(Array.from(transporterMap.values()));
 
       // 3. Load Trips
       const tripRes = await fetch(
@@ -803,68 +789,39 @@ const DredgingDashboard: React.FC = () => {
     setShowAddTruckModal(true);
   };
 
-    const handleAddTruckSubmit = async () => {
-    const transporter = transporters.find((t) => t.id === truckForm.transporterId);
-    if (!transporter) return;
+   const handleAddTruckSubmit = async () => {
+  const transporter = transporters.find((t) => t.id === truckForm.transporterId);
+  if (!transporter || !truckForm.plateNumber) return;
 
-    const truckName = truckForm.truckName?.trim() || "Unnamed";
-    const plateNumber = truckForm.plateNumber?.trim();
-    if (!plateNumber) {
-      alert("Please enter a plate number for the truck.");
-      return;
-    }
+  const tBilling = Number(truckForm.transporterBillingCbm) || 0;
+  const dBilling = Number(truckForm.dredgerBillingCbm) || 0;
 
-    const dredgerBillingCbmRaw = Number.isFinite(truckForm.dredgerBillingCbm || 0)
-      ? (truckForm.dredgerBillingCbm as number)
-      : 0;
-    const transporterBillingCbmRaw = Number.isFinite(truckForm.transporterBillingCbm || 0)
-      ? (truckForm.transporterBillingCbm as number)
-      : dredgerBillingCbmRaw;
-
-    const dredgerBillingCbm = dredgerBillingCbmRaw;
-    const transporterBillingCbm = transporterBillingCbmRaw;
-
-    const capacity = dredgerBillingCbm;
-
-    const newTruck: TruckRecord = {
-      id: `temp-${Date.now()}`,
-      truckName,
-      plateNumber,
-      capacityCbm: capacity,
-      transporterId: transporter.id,
-      status: truckForm.status || "active",
-      transporterBillingCbm,
-      dredgerBillingCbm,
-    };
-
-    // Payload matches sheet columns exactly (no extra fields)
-    const truckData = {
-  Code: transporter.code ?? "",
-  Name: transporter.name ?? "",
-  RatePerCbm: transporter.ratePerCbm ?? 0,
-  Status: transporter.status ?? "active",
-  Contractor: transporter.contractor ?? "",
-  ContractNumber: transporter.contractNumber ?? "",
-  PlateNumber: plateNumber, // Ensure this is the actual plate
-  TransporterBillingCbm: transporterBillingCbm, 
-  DredgerBillingCbm: dredgerBillingCbm,
-  TruckName: truckName
-};
-
-    setTransporters((prev) =>
-      prev.map((t) => {
-        if (t.id === transporter.id) {
-          return { ...t, trucks: [...t.trucks, newTruck] };
-        }
-        return t;
-      })
-    );
-
-    setShowAddTruckModal(false);
-    setTruckForm({ transporterId: "" });
-
-    submitToAppsScript("saveTransporter", truckData, () => {}, true);
+  const truckData = {
+    Code: transporter.code,
+    Name: transporter.name,
+    RatePerCbm: transporter.ratePerCbm,
+    Status: transporter.status,
+    Contractor: transporter.contractor,
+    ContractNumber: transporter.contractNumber,
+    PlateNumber: truckForm.plateNumber.trim(),
+    TransporterBillingCbm: tBilling,
+    DredgerBillingCbm: dBilling,
+    TruckName: truckForm.truckName?.trim() || "Unnamed"
   };
+
+  // Optimistic UI Update
+  setTransporters((prev) =>
+    prev.map((t) => (t.id === transporter.id ? { 
+      ...t, 
+      trucks: [...t.trucks, { ...truckData, id: `${t.code}-${truckData.PlateNumber}`, capacityCbm: dBilling } as any] 
+    } : t))
+  );
+
+  setShowAddTruckModal(false);
+  submitToAppsScript("saveTransporter", truckData, () => {
+    console.log("Truck saved to sheet");
+  }, true);
+};
 
 
   const deleteTruck = async (transporterId: string, truckId: string) => {
