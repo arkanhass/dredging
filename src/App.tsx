@@ -184,6 +184,12 @@ const formatDateSlash = (iso: string): string => {
 };
 
 const DredgingDashboard: React.FC = () => {
+  // Refs for PDF sections
+  const reportOverallRef = useRef<HTMLDivElement>(null);
+  const reportDredgerRef = useRef<HTMLDivElement>(null);
+  const reportTransporterRef = useRef<HTMLDivElement>(null);
+  const reportAccountingRef = useRef<HTMLDivElement>(null);
+
   // State
   const [activeTab, setActiveTab] = useState<
     | "dashboard"
@@ -1279,16 +1285,14 @@ const DredgingDashboard: React.FC = () => {
 
   const formatCurrency = (amount: number) => `₦${amount.toLocaleString()}`;
 
-  const downloadReportsAsPdf = async () => {
-    const reportsNode = document.getElementById("reports-section");
-    if (!reportsNode) return;
-    const canvas = await html2canvas(reportsNode, { scale: 2, useCORS: true });
+  // Helper: render a node to PDF (landscape, A4), respecting natural height across pages
+  const renderNodeToPdf = async (node: HTMLElement, pdf: jsPDF) => {
+    const canvas = await html2canvas(node, { scale: 2, useCORS: true, backgroundColor: "#ffffff" });
     const imgData = canvas.toDataURL("image/png");
-    const pdf = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
     const pageWidth = pdf.internal.pageSize.getWidth();
     const pageHeight = pdf.internal.pageSize.getHeight();
     const imgWidth = pageWidth;
-    const imgHeight = (canvas.height * pageWidth) / canvas.width;
+    const imgHeight = (canvas.height * imgWidth) / canvas.width;
     let position = 0;
     let heightLeft = imgHeight;
 
@@ -1300,6 +1304,27 @@ const DredgingDashboard: React.FC = () => {
       pdf.addPage();
       pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
       heightLeft -= pageHeight;
+    }
+  };
+
+  // Download PDF with page breaks per major section
+  const downloadReportsAsPdf = async () => {
+    const pdf = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
+
+    const sections: Array<{ ref: React.RefObject<HTMLDivElement | null> }> = [
+      { ref: reportOverallRef },
+      { ref: reportDredgerRef },
+      { ref: reportTransporterRef },
+      { ref: reportAccountingRef },
+    ];
+
+    let first = true;
+    for (const section of sections) {
+      const node = section.ref.current;
+      if (!node) continue;
+      if (!first) pdf.addPage();
+      await renderNodeToPdf(node, pdf);
+      first = false;
     }
 
     pdf.save("reports.pdf");
@@ -2468,7 +2493,7 @@ const DredgingDashboard: React.FC = () => {
         {/* Reports Tab */}
         {activeTab === "reports" && (
           <div className="space-y-6" id="reports-section">
-            <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center justify-between gap-3 print:hidden">
               <h2 className="text-2xl font-bold">Comprehensive Reports</h2>
               <div className="flex space-x-2 flex-wrap gap-2">
                 <button
@@ -2509,7 +2534,7 @@ const DredgingDashboard: React.FC = () => {
               </div>
             </div>
 
-            <div className="bg-white rounded-lg shadow p-6">
+            <div className="bg-white rounded-lg shadow p-6" ref={reportOverallRef}>
               <h3 className="font-bold text-xl mb-4 flex items-center space-x-2">
                 <FileSpreadsheet className="w-6 h-6" />
                 <span>Overall Project Summary</span>
@@ -2558,7 +2583,7 @@ const DredgingDashboard: React.FC = () => {
               </div>
             </div>
 
-            <div className="bg-white rounded-lg shadow p-6">
+            <div className="bg-white rounded-lg shadow p-6" ref={reportDredgerRef}>
               <h3 className="font-bold text-xl mb-4">Dredger Performance Report</h3>
               <div className="overflow-x-auto">
                 <table className="w-full">
@@ -2610,7 +2635,7 @@ const DredgingDashboard: React.FC = () => {
               </div>
             </div>
 
-            <div className="bg-white rounded-lg shadow p-6">
+            <div className="bg-white rounded-lg shadow p-6" ref={reportTransporterRef}>
               <h3 className="font-bold text-xl mb-4">Transporter Performance Report</h3>
               <div className="overflow-x-auto">
                 <table className="w-full">
@@ -2689,7 +2714,7 @@ const DredgingDashboard: React.FC = () => {
               </div>
             </div>
 
-            <div className="bg-white rounded-lg shadow p-6">
+            <div className="bg-white rounded-lg shadow p-6" ref={reportAccountingRef}>
               <h3 className="font-bold text-xl mb-4 flex items-center space-x-2">
                 <span className="text-2xl font-bold">₦</span>
                 <span>Accounting Summary</span>
