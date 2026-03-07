@@ -190,6 +190,9 @@ const DredgingDashboard: React.FC = () => {
   const reportTransporterRef = useRef<HTMLDivElement>(null);
   const reportAccountingRef = useRef<HTMLDivElement>(null);
 
+  // PDF export state (used to hide borders/controls during capture)
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
+
   // State
   const [activeTab, setActiveTab] = useState<
     | "dashboard"
@@ -1307,27 +1310,32 @@ const DredgingDashboard: React.FC = () => {
     }
   };
 
-  // Download PDF with page breaks per major section
+  // Download PDF with page breaks per major section, hiding controls and borders
   const downloadReportsAsPdf = async () => {
-    const pdf = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
+    setIsExportingPdf(true);
+    try {
+      const pdf = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
 
-    const sections: Array<{ ref: React.RefObject<HTMLDivElement | null> }> = [
-      { ref: reportOverallRef },
-      { ref: reportDredgerRef },
-      { ref: reportTransporterRef },
-      { ref: reportAccountingRef },
-    ];
+      const sections: Array<{ ref: React.RefObject<HTMLDivElement | null> }> = [
+        { ref: reportOverallRef },
+        { ref: reportDredgerRef },
+        { ref: reportTransporterRef },
+        { ref: reportAccountingRef },
+      ];
 
-    let first = true;
-    for (const section of sections) {
-      const node = section.ref.current;
-      if (!node) continue;
-      if (!first) pdf.addPage();
-      await renderNodeToPdf(node, pdf);
-      first = false;
+      let first = true;
+      for (const section of sections) {
+        const node = section.ref.current;
+        if (!node) continue;
+        if (!first) pdf.addPage();
+        await renderNodeToPdf(node, pdf);
+        first = false;
+      }
+
+      pdf.save("reports.pdf");
+    } finally {
+      setIsExportingPdf(false);
     }
-
-    pdf.save("reports.pdf");
   };
 
   return (
@@ -2534,11 +2542,14 @@ const DredgingDashboard: React.FC = () => {
               </div>
             </div>
 
-            <div className="bg-white rounded-lg shadow p-6" ref={reportOverallRef}>
-              <h3 className="font-bold text-xl mb-4 flex items-center space-x-2">
+            <div className={`bg-white rounded-lg shadow p-6 ${isExportingPdf ? "border-0" : ""}`} ref={reportOverallRef}>
+              <div className="flex items-center space-x-2 mb-4">
                 <FileSpreadsheet className="w-6 h-6" />
-                <span>Overall Project Summary</span>
-              </h3>
+                <h3 className="font-bold text-xl">Overall Project Summary</h3>
+                {latestTripDisplay && (
+                  <span className="text-sm text-gray-500">— up to {latestTripDisplay}</span>
+                )}
+              </div>
                     <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                 <div className="bg-blue-50 p-4 rounded-lg">
                   <p className="text-sm text-gray-600">Total Volume</p>
