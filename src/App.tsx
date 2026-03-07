@@ -148,6 +148,12 @@ const toSortableISO = (d: string): string => {
   return d; // fallback
 };
 
+const generateReference = () => {
+  const yyyymmdd = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+  const rand = Math.random().toString(36).slice(2, 6).toUpperCase();
+  return `PAY-${yyyymmdd}-${rand}`;
+};
+
 const parseMoney = (val: any) => {
   if (val === undefined || val === null) return 0;
   const num = parseFloat(String(val).replace(/,/g, ""));
@@ -576,9 +582,10 @@ const DredgingDashboard: React.FC = () => {
     } else {
       const rawId = paymentForm.entityId || "";
       const matchedTransporter = transporters.find((t) => t.code === rawId || t.id === rawId);
-      // Always send transporter CODE to Sheets (not contractor name)
       entityCode = matchedTransporter?.code || rawId;
     }
+
+    const referenceToUse = editingItem?.reference || paymentForm.reference || generateReference();
 
     const newPayment: Payment = {
       id: editingItem ? editingItem.id : `temp-${Date.now()}`,
@@ -587,7 +594,7 @@ const DredgingDashboard: React.FC = () => {
       entityId: entityCode,
       amount: paymentForm.amount || 0,
       paymentMethod: paymentForm.paymentMethod || "Bank Transfer",
-      reference: paymentForm.reference || `PAY-${Date.now()}`,
+      reference: referenceToUse,
       notes: paymentForm.notes || "",
     };
 
@@ -606,7 +613,7 @@ const DredgingDashboard: React.FC = () => {
       EntityCode: entityCode,
       Amount: paymentForm.amount,
       PaymentMethod: paymentForm.paymentMethod || "Bank Transfer",
-      Reference: paymentForm.reference || newPayment.reference,
+      Reference: newPayment.reference,
       Notes: paymentForm.notes || "",
     };
 
@@ -631,16 +638,9 @@ const DredgingDashboard: React.FC = () => {
         }
       };
 
-      // 1) delete the existing row by its original reference (send both keys to match Apps Script expectations)
       await post("deletePayment", { Reference: oldReference, reference: oldReference });
-
-      // 2) wait longer to ensure deletion is processed on Sheets
       await new Promise((resolve) => setTimeout(resolve, 5200));
-
-      // 3) save the updated payment (reuse old ref if user left it blank)
       await post("savePayment", { ...paymentData, Reference: newReference || oldReference, reference: newReference || oldReference });
-
-      // 4) final refresh to sync state from Sheets (allow time for append)
       setTimeout(() => loadDataFromSheets(), 5200);
     } else {
       submitToAppsScript("savePayment", paymentData, () => {}, true);
@@ -2639,16 +2639,10 @@ const DredgingDashboard: React.FC = () => {
                   <option value="Other">Other</option>
                 </select>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Reference Number</label>
-                <input
-                  type="text"
-                  value={paymentForm.reference || ""}
-                  onChange={(e) => setPaymentForm({ ...paymentForm, reference: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg"
-                  placeholder="PAY-2024-XXX"
-                />
-              </div>
+              {/* Reference hidden from user to avoid accidental edits */}
+              <input type="hidden" value={paymentForm.reference || ""} readOnly />
+              {/* Reference is auto-generated and hidden to avoid accidental edits */}
+              <input type="hidden" value={paymentForm.reference || ""} readOnly />
               <div>
                 <label className="block text-sm font-medium text-gray-700">Notes</label>
                 <textarea
