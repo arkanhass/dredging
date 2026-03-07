@@ -67,6 +67,7 @@ interface Trip {
   transporterRate: number;
   dredgerAmount: number;
   transporterAmount: number;
+  transporterBillingCbm?: number; // optional billing capacity just for transporter charges
   dumpingLocation: string;
   notes: string;
 }
@@ -304,15 +305,28 @@ const DredgingDashboard: React.FC = () => {
 
           const transporter = transporterMap.get(transporterCode);
           const truck = transporter?.trucks.find((t: any) => t.plateNumber === plateNumber);
-          const capacityCbm = truck?.capacityCbm ?? 0; // trust truck capacity; sheet amounts handle rate differences
+          const capacityCbm = truck?.capacityCbm ?? 0; // dredger actual capacity
           const tripsCount = parseInt(row[4]) || 0;
 
           const dredgerRate = parseMoney(row[5]);
           const transporterRate = parseMoney(row[6]);
-                    const dredgerAmount = parseMoney(row[9]);
-          const transporterAmount = Number.isFinite(parseMoney(row[10]))
-            ? parseMoney(row[10])
-            : tripsCount * capacityCbm * transporterRate;
+          const dredgerAmount = parseMoney(row[9]);
+          const transporterAmount = parseMoney(row[10]);
+          const transporterBillingCbmRaw = parseMoney(row[11]);
+
+          // Transporter billed volume: use sheet column if present, else capacity
+          const transporterBillingCbm = Number.isFinite(transporterBillingCbmRaw) && transporterBillingCbmRaw > 0
+            ? transporterBillingCbmRaw
+            : capacityCbm;
+
+          const billedVolumeTransporter = tripsCount * transporterBillingCbm;
+          const billedTransporterAmount = Number.isFinite(transporterAmount) && transporterAmount > 0
+            ? transporterAmount
+            : billedVolumeTransporter * transporterRate;
+
+          const billedDredgerAmount = Number.isFinite(dredgerAmount) && dredgerAmount > 0
+            ? dredgerAmount
+            : tripsCount * capacityCbm * dredgerRate;
 
           return {
             id: `trip-${i}`,
@@ -326,8 +340,9 @@ const DredgingDashboard: React.FC = () => {
             totalVolume: tripsCount * capacityCbm,
             dredgerRate,
             transporterRate,
-            dredgerAmount,
-            transporterAmount,
+            dredgerAmount: billedDredgerAmount,
+            transporterAmount: billedTransporterAmount,
+            transporterBillingCbm,
             dumpingLocation: row[7],
             notes: row[8] || "",
           } satisfies Trip;
@@ -546,11 +561,17 @@ const DredgingDashboard: React.FC = () => {
     const transporter = transporters.find((t) => t.id === tripForm.transporterId);
 
     const tripsCount = tripForm.trips || 0;
-    const capacity = truck?.capacityCbm || 0;
+    const capacity = truck?.capacityCbm || 0; // dredger capacity
     const dredgerRate = tripForm.dredgerRate ?? dredger?.ratePerCbm ?? 0;
     const transporterRate = tripForm.transporterRate ?? transporter?.ratePerCbm ?? 0;
+
+    // Optional transporter billing capacity (e.g., 13 CBM billed instead of actual 12.8)
+    const transporterBillingCbm = tripForm.transporterBillingCbm && tripForm.transporterBillingCbm > 0
+      ? tripForm.transporterBillingCbm
+      : capacity;
+
     const dredgerAmount = tripForm.dredgerAmount ?? tripsCount * capacity * dredgerRate;
-    const transporterAmount = tripForm.transporterAmount ?? tripsCount * capacity * transporterRate;
+    const transporterAmount = tripForm.transporterAmount ?? tripsCount * transporterBillingCbm * transporterRate;
 
     const newTrip: Trip = {
       id: editingItem ? editingItem.id : `temp-${Date.now()}`,
@@ -566,6 +587,7 @@ const DredgingDashboard: React.FC = () => {
       transporterRate,
       dredgerAmount,
       transporterAmount,
+      transporterBillingCbm,
       dumpingLocation: tripForm.dumpingLocation || "",
       notes: tripForm.notes || "",
     };
@@ -588,6 +610,7 @@ const DredgingDashboard: React.FC = () => {
       Notes: tripForm.notes || "",
       DredgerAmount: dredgerAmount,
       TransporterAmount: transporterAmount,
+      TransporterBillingCbm: transporterBillingCbm,
     };
 
     setShowTripModal(false);
@@ -791,10 +814,11 @@ const DredgingDashboard: React.FC = () => {
       csv += "TR-001,Quick Haul Transport,850,active,Quick Haul Ltd,CNT-2024-101,ABC-124,18,Truck B\n";
       filename = "transporters_template.csv";
     } else if (type === "trips") {
-      csv = "Date,DredgerCode,TransporterCode,PlateNumber,Trips,DredgerRate,TransporterRate,DumpingLocation,Notes\n";
-      csv += "2024-01-15,DR-001,TR-001,ABC-123,5,1500,850,Site A - North,\n";
-      csv += "2024-01-15,DR-001,TR-001,ABC-124,6,1500,850,Site A - South,\n";
-      csv += "2024-01-15,DR-002,TR-002,XYZ-456,10,1600,900,Site B - East,\n";
+      csv =
+        "Date,DredgerCode,TransporterCode,PlateNumber,Trips,DredgerRate,TransporterRate,DumpingLocation,Notes,DredgerAmount,TransporterAmount,TransporterBillingCbm\n";
+      csv += "2024-01-15,DR-001,TR-001,ABC-123,5,1500,850,Site A - North,,96000,55250,13\n";
+      csv += "2024-01-15,DR-001,TR-001,ABC-124,6,1500,850,Site A - South,,115200,66300,13\n";
+      csv += "2024-01-16,DR-002,TR-002,XYZ-456,10,1600,900,Site B - East,,204800,117000,12.8\n";
       filename = "trips_template.csv";
     } else if (type === "payments") {
       csv = "Date,EntityType,EntityId,Amount,PaymentMethod,Reference,Notes\n";
@@ -886,6 +910,10 @@ const DredgingDashboard: React.FC = () => {
 
             const dredgerAmountFromSheet = parseMoney(row.DredgerAmount ?? row.dredgerAmount ?? row["Dredger Amount"]);
             const transporterAmountFromSheet = parseMoney(row.TransporterAmount ?? row.transporterAmount ?? row["Transporter Amount"]);
+            const transporterBillingCbmFromSheet = parseMoney(row.TransporterBillingCbm ?? row.transporterBillingCbm ?? row["Transporter Billing Cbm"] ?? row["TransporterBillingCbm"]);
+            const effectiveBillingCbm = Number.isFinite(transporterBillingCbmFromSheet) && transporterBillingCbmFromSheet > 0
+              ? transporterBillingCbmFromSheet
+              : capacity;
 
             payload = {
               Date: tripDate,
@@ -898,7 +926,8 @@ const DredgingDashboard: React.FC = () => {
               DumpingLocation: row.DumpingLocation || row.dumpingLocation || "",
               Notes: row.Notes || row.notes || "",
               DredgerAmount: dredgerAmountFromSheet || tripsCount * capacity * drRate,
-              TransporterAmount: transporterAmountFromSheet || tripsCount * capacity * trRate,
+              TransporterAmount: transporterAmountFromSheet || tripsCount * effectiveBillingCbm * trRate,
+              TransporterBillingCbm: effectiveBillingCbm,
             };
           } else if (type === "payments") {
             action = "savePayment";
@@ -953,7 +982,7 @@ const DredgingDashboard: React.FC = () => {
 
     if (type === "trips") {
       csv =
-        "Date,Dredger Code,Dredger,Transporter Code,Transporter,Plate Number,Trips,Capacity (CBM),Total Volume (CBM),Dredger Rate,Transporter Rate,Dredger Amount,Transporter Amount,Dumping Location,Notes\n";
+        "Date,Dredger Code,Dredger,Transporter Code,Transporter,Plate Number,Trips,Capacity (CBM),Total Volume (CBM),Dredger Rate,Transporter Rate,Dredger Amount,Transporter Amount,Transporter Billing CBM,Dumping Location,Notes\n";
       trips.forEach((t) => {
         const dredger = dredgers.find((d) => d.id === t.dredgerId);
         const transporter = transporters.find((tr) => tr.id === t.transporterId);
@@ -961,7 +990,7 @@ const DredgingDashboard: React.FC = () => {
         const transporterAmount = Number.isFinite(t.transporterAmount)
           ? t.transporterAmount
           : t.totalVolume * (t.transporterRate || 0);
-        csv += `${t.date},${dredger?.code || ""},${dredger?.name || ""},${transporter?.code || ""},${transporter?.name || ""},${t.plateNumber},${t.trips},${t.capacityCbm},${t.totalVolume},${t.dredgerRate || 0},${t.transporterRate || 0},${dredgerAmount},${transporterAmount},${t.dumpingLocation},${t.notes}\n`;
+        csv += `${t.date},${dredger?.code || ""},${dredger?.name || ""},${transporter?.code || ""},${transporter?.name || ""},${t.plateNumber},${t.trips},${t.capacityCbm},${t.totalVolume},${t.dredgerRate || 0},${t.transporterRate || 0},${dredgerAmount},${transporterAmount},${t.transporterBillingCbm ?? t.capacityCbm},${t.dumpingLocation},${t.notes}\n`;
       });
       filename = "trip_report.csv";
     } else if (type === "dredgers") {
@@ -2726,7 +2755,18 @@ const DredgingDashboard: React.FC = () => {
                 <select
                   value={tripForm.truckId || ""}
                   onChange={(e) => {
-                    setTripForm({ ...tripForm, truckId: e.target.value });
+                    const selectedTruck = transporters
+                      .find((t) => t.id === tripForm.transporterId)
+                      ?.trucks.find((tr) => tr.id === e.target.value);
+                    setTripForm({
+                      ...tripForm,
+                      truckId: e.target.value,
+                      // Default transporter billing CBM to this truck's capacity if not already set
+                      transporterBillingCbm:
+                        tripForm.transporterBillingCbm !== undefined
+                          ? tripForm.transporterBillingCbm
+                          : selectedTruck?.capacityCbm,
+                    });
                   }}
                   className="w-full px-3 py-2 border rounded-lg"
                   disabled={!tripForm.transporterId}
@@ -2753,16 +2793,41 @@ const DredgingDashboard: React.FC = () => {
                 />
               </div>
               {tripForm.truckId && (
-                <div className="bg-blue-50 p-3 rounded">
+                <div className="bg-blue-50 p-3 rounded space-y-1">
                   <p className="text-sm text-blue-800">
-                    <strong>Calculated Volume:</strong> {" "}
+                    <strong>Dredger Volume (actual capacity):</strong> {" "}
                     {(tripForm.trips || 0) *
                       (transporters.flatMap((t) => t.trucks).find((tr) => tr.id === tripForm.truckId)?.capacityCbm || 0)}
                     {" "}
                     CBM
                   </p>
+                  <p className="text-sm text-purple-800">
+                    <strong>Transporter Billed Volume:</strong> {" "}
+                    {(tripForm.trips || 0) *
+                      (tripForm.transporterBillingCbm ||
+                        transporters.flatMap((t) => t.trucks).find((tr) => tr.id === tripForm.truckId)?.capacityCbm ||
+                        0)}
+                    {" "}
+                    CBM
+                  </p>
                 </div>
               )}
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Transporter Billing Capacity (CBM)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={tripForm.transporterBillingCbm ?? ""}
+                  onChange={(e) =>
+                    setTripForm({ ...tripForm, transporterBillingCbm: e.target.value ? parseFloat(e.target.value) : undefined })
+                  }
+                  className="w-full px-3 py-2 border rounded-lg"
+                  placeholder="Leave blank to use truck capacity"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Use this if transporter billing CBM differs from actual capacity (e.g., 12.8 actual but bill 13).
+                </p>
+              </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">Dumping Location</label>
                 <input
