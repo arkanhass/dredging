@@ -584,7 +584,9 @@ const DredgingDashboard: React.FC = () => {
     setEditingItem(null);
     setDredgerForm({});
 
-    submitToAppsScript("saveDredger", dredgerData, () => {}, true);
+    submitToAppsScript("saveDredger", dredgerData, () => {
+      console.log("Dredger saved to sheet");
+    }, false);
   };
 
   const saveTransporter = async (e?: React.FormEvent) => {
@@ -596,7 +598,6 @@ const DredgingDashboard: React.FC = () => {
       setTransporters((prev) => [...prev, newTransporter]);
     }
 
-    // Note: billing CBMs belong to trucks, so when adding transporter (no truck yet) we don't send billing CBMs
     const transporterData = {
       Code: transporterForm.code,
       Name: transporterForm.name,
@@ -604,15 +605,19 @@ const DredgingDashboard: React.FC = () => {
       Status: transporterForm.status || "active",
       Contractor: transporterForm.contractor || "",
       ContractNumber: transporterForm.contractNumber || "",
-      PlateNumber: "",
-      CapacityCbm: 0,
+      PlateNumber: "", // Empty for the main transporter entry
+      TransporterBillingCbm: 0,
+      DredgerBillingCbm: 0,
+      TruckName: ""
     };
 
     setShowTransporterModal(false);
     setEditingItem(null);
     setTransporterForm({});
 
-    submitToAppsScript("saveTransporter", transporterData, () => {}, true);
+    submitToAppsScript("saveTransporter", transporterData, () => {
+      console.log("Transporter saved to sheet");
+    }, false);
   };
 
   const saveTrip = async (e?: React.FormEvent) => {
@@ -676,10 +681,28 @@ const DredgingDashboard: React.FC = () => {
       setTrips((prev) => [...prev, newTrip]);
     }
 
+    // For editing, we must delete the old row first in Google Sheets
+    // because saveTrip in Apps Script only appends.
+    if (editingItem) {
+      const oldDredger = dredgers.find(d => d.id === editingItem.dredgerId);
+      const deleteData = {
+        date: editingItem.date,
+        dredgerCode: oldDredger?.code || ""
+      };
+      
+      // Call deleteTrip first
+      await fetch(APPS_SCRIPT_URL, {
+        method: "POST",
+        mode: "no-cors",
+        headers: { "Content-Type": "text/plain" },
+        body: JSON.stringify({ action: "deleteTrip", data: deleteData }),
+      });
+      
+      // Wait for Apps Script to process the deletion
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    }
+
     const tripData = {
-      actionType: editingItem ? "editTrip" : "saveTrip",
-      originalDate: editingItem ? (editingItem.originalDate || editingItem.date) : undefined,
-      originalDredgerCode: editingItem ? (dredgers.find(d => d.id === editingItem.dredgerId)?.code) : undefined,
       Date: tripForm.date,
       DredgerCode: dredger?.code || "",
       TransporterCode: transporter?.code || "",
@@ -699,9 +722,10 @@ const DredgingDashboard: React.FC = () => {
     setEditingItem(null);
     setTripForm({});
 
-    submitToAppsScript(tripData.actionType, tripData, () => {
+    // Now call saveTrip to append the new/updated data
+    submitToAppsScript("saveTrip", tripData, () => {
       console.log(`Trip ${editingItem ? 'updated' : 'saved'} in sheet`);
-    }, false); // Set to false to force reload and confirm persistence
+    }, false);
   };
 
   const savePayment = async (e?: React.FormEvent) => {
@@ -810,7 +834,9 @@ const DredgingDashboard: React.FC = () => {
       };
     }
 
-    submitToAppsScript(actionName, actionData, () => {}, true);
+    submitToAppsScript(actionName, actionData, () => {
+      console.log(`${type} deleted from sheet`);
+    }, false); // Set silent=false to refresh state from Sheets
   };
 
   const openAddTruckModal = (transporterId: string) => {
