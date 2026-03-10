@@ -315,10 +315,10 @@ const DredgingDashboard: React.FC = () => {
             id: `${code}-${plateNumber}`,
             truckName,
             plateNumber,
-            capacityCbm: dBilling || tBilling || 0, // Fallback ONLY for internal capacity
+            capacityCbm: dBilling || tBilling || 0, // Fallback ONLY for internal calculation
             status: "active",
-            transporterBillingCbm: tBilling, // EXACT value from sheet (can be null)
-            dredgerBillingCbm: dBilling, // EXACT value from sheet (can be null)
+            transporterBillingCbm: tBilling, // EXACT value or null
+            dredgerBillingCbm: dBilling, // EXACT value or null
           });
         }
       });
@@ -335,19 +335,15 @@ const DredgingDashboard: React.FC = () => {
           const rawDate = row[0] || "";
           const dredgerCode = (row[1] || "").toString().trim();
           const transporterCode = (row[2] || "").toString().trim();
-          const plateNumber = (row[3] || "").toString().trim().toUpperCase();
+          const plateNumber = (row[3] || "").toString().trim();
 
           const transporter = transporterMap.get(transporterCode);
           // Case-insensitive and trimmed plate matching
-          const truck = transporter?.trucks.find((t: any) => (t.plateNumber || "").trim().toUpperCase() === plateNumber);
+          const truck = transporter?.trucks.find((t: any) => (t.plateNumber || "").trim().toUpperCase() === plateNumber.toUpperCase());
           
-          // EXACT values from trip row (columns 11 & 12)
+          // EXACT values from trip row (columns 11 & 12) or null
           const tBillingRaw = parseMoney(row[11]);
           const dBillingRaw = parseMoney(row[12]);
-
-          // Effective billing values for this specific trip: Column > Truck Profile
-          const transporterBillingCbm = tBillingRaw !== null ? tBillingRaw : truck?.transporterBillingCbm;
-          const dredgerBillingCbm = dBillingRaw !== null ? dBillingRaw : truck?.dredgerBillingCbm;
 
           const tripsCount = parseInt(row[4]) || 0;
           const dredgerRate = parseMoney(row[5]) || 0;
@@ -356,13 +352,9 @@ const DredgingDashboard: React.FC = () => {
           const transporterAmount = parseMoney(row[10]);
 
           // FOR INTERNAL LOGIC ONLY: 
-          // Use Dredger Override > Transporter Override > Profile Value > 0
-          const effTBilling = transporterBillingCbm !== null && transporterBillingCbm !== undefined 
-            ? transporterBillingCbm 
-            : (truck?.transporterBillingCbm || 0);
-          const effDBilling = dredgerBillingCbm !== null && dredgerBillingCbm !== undefined 
-            ? dredgerBillingCbm 
-            : (truck?.dredgerBillingCbm || effTBilling || 0);
+          // Use Dredger Override > Dredger Profile > Transporter Override > Transporter Profile > 0
+          const effTBilling = tBillingRaw !== null ? tBillingRaw : (truck?.transporterBillingCbm || 0);
+          const effDBilling = dBillingRaw !== null ? dBillingRaw : (truck?.dredgerBillingCbm || effTBilling || 0);
 
           const totalVolume = tripsCount * effDBilling;
           const billedTransporterAmount = transporterAmount !== null
@@ -379,7 +371,7 @@ const DredgingDashboard: React.FC = () => {
             dredgerId: loadedDredgers.find((d: Dredger) => d.code === dredgerCode)?.id || "",
             transporterId: transporterCode,
             truckId: truck?.id || "",
-            plateNumber: (row[3] || "").toString().trim(), // Keep original formatting for display
+            plateNumber,
             trips: tripsCount,
             capacityCbm: effDBilling,
             totalVolume,
@@ -387,8 +379,8 @@ const DredgingDashboard: React.FC = () => {
             transporterRate,
             dredgerAmount: billedDredgerAmount,
             transporterAmount: billedTransporterAmount,
-            transporterBillingCbm: transporterBillingCbm ?? undefined, // Store EXACT value
-            dredgerBillingCbm: dredgerBillingCbm ?? undefined, // Store EXACT value
+            transporterBillingCbm: tBillingRaw ?? undefined, // Store EXACT override or undefined
+            dredgerBillingCbm: dBillingRaw ?? undefined, // Store EXACT override or undefined
             dumpingLocation: row[7],
             notes: row[8] || "",
           } satisfies Trip;
@@ -648,25 +640,15 @@ const DredgingDashboard: React.FC = () => {
     const transporter = transporters.find((t) => t.id === tripForm.transporterId);
 
     const tripsCount = tripForm.trips || 0;
-    const capacity = truck?.capacityCbm || 0; 
     const dredgerRate = tripForm.dredgerRate ?? dredger?.ratePerCbm ?? 0;
     const transporterRate = tripForm.transporterRate ?? transporter?.ratePerCbm ?? 0;
 
-    const defaultTransporterBilling = truck?.transporterBillingCbm && truck.transporterBillingCbm > 0
-      ? truck.transporterBillingCbm
-      : capacity;
-    const defaultDredgerBilling = truck?.dredgerBillingCbm && truck.dredgerBillingCbm > 0
-      ? truck.dredgerBillingCbm
-      : capacity;
+    // FOR INTERNAL CALCULATION ONLY
+    const internalTBilling = tripForm.transporterBillingCbm || truck?.transporterBillingCbm || truck?.capacityCbm || 0;
+    const internalDBilling = tripForm.dredgerBillingCbm || truck?.dredgerBillingCbm || internalTBilling;
 
-    const transporterBillingCbm = tripForm.transporterBillingCbm && tripForm.transporterBillingCbm > 0
-      ? tripForm.transporterBillingCbm
-      : defaultTransporterBilling;
-
-    const dredgerBillingCbm = defaultDredgerBilling;
-
-    const dredgerAmount = tripForm.dredgerAmount ?? tripsCount * dredgerBillingCbm * dredgerRate;
-    const transporterAmount = tripForm.transporterAmount ?? tripsCount * transporterBillingCbm * transporterRate;
+    const dredgerAmount = tripForm.dredgerAmount ?? tripsCount * internalDBilling * dredgerRate;
+    const transporterAmount = tripForm.transporterAmount ?? tripsCount * internalTBilling * transporterRate;
 
     const newTrip: Trip = {
       id: editingItem ? editingItem.id : `temp-${Date.now()}`,
@@ -676,13 +658,14 @@ const DredgingDashboard: React.FC = () => {
       truckId: tripForm.truckId || "",
       plateNumber: truck?.plateNumber || "",
       trips: tripsCount,
-      capacityCbm: capacity,
-      totalVolume: tripsCount * capacity,
+      capacityCbm: internalDBilling,
+      totalVolume: tripsCount * internalDBilling,
       dredgerRate,
       transporterRate,
       dredgerAmount,
       transporterAmount,
-      transporterBillingCbm,
+      transporterBillingCbm: tripForm.transporterBillingCbm || undefined,
+      dredgerBillingCbm: tripForm.dredgerBillingCbm || undefined,
       dumpingLocation: tripForm.dumpingLocation || "",
       notes: tripForm.notes || "",
     };
@@ -734,8 +717,8 @@ const DredgingDashboard: React.FC = () => {
         Notes: newTrip.notes || "",
         DredgerAmount: dredgerAmount,
         TransporterAmount: transporterAmount,
-        TransporterBillingCbm: transporterBillingCbm,
-        DredgerBillingCbm: dredgerBillingCbm,
+        TransporterBillingCbm: tripForm.transporterBillingCbm || "", // Send blank if not explicitly set
+        DredgerBillingCbm: tripForm.dredgerBillingCbm || "", // Send blank if not explicitly set
       };
 
       submitToAppsScript("saveTrip", tripData, () => {
@@ -1334,8 +1317,11 @@ const DredgingDashboard: React.FC = () => {
         const transporterAmount = Number.isFinite(t.transporterAmount)
           ? t.transporterAmount
           : t.totalVolume * (t.transporterRate || 0);
-        const transporterBilling = t.transporterBillingCbm ?? truck?.transporterBillingCbm ?? t.capacityCbm;
-        const dredgerBilling = t.dredgerBillingCbm ?? truck?.dredgerBillingCbm ?? t.capacityCbm;
+        
+        // Use exact values for display
+        const transporterBilling = t.transporterBillingCbm ?? truck?.transporterBillingCbm ?? "";
+        const dredgerBilling = t.dredgerBillingCbm ?? truck?.dredgerBillingCbm ?? "";
+        
         csv += `${t.date},${dredger?.code || ""},${dredger?.name || ""},${transporter?.code || ""},${transporter?.name || ""},${t.plateNumber},${t.trips},${t.capacityCbm},${t.totalVolume},${t.dredgerRate || 0},${t.transporterRate || 0},${dredgerAmount},${transporterAmount},${transporterBilling},${dredgerBilling},${t.dumpingLocation},${t.notes}\n`;
       });
       filename = "trip_report.csv";
