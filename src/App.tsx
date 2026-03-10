@@ -1119,6 +1119,66 @@ const DredgingDashboard: React.FC = () => {
   };
 
   // Export to Excel (CSV format)
+  const exportTrucksReport = () => {
+    const allTrucks: any[] = [];
+    
+    transporters.forEach(transporter => {
+      transporter.trucks.forEach(truck => {
+        // Calculate total CBM transported by this truck from trips
+        const truckTrips = trips.filter(t => 
+          t.transporterId === transporter.id && 
+          (t.truckId === truck.id || t.plateNumber === truck.plateNumber)
+        );
+        const totalTrips = truckTrips.reduce((sum, t) => sum + (t.trips || 0), 0);
+        const totalCbmTransported = truckTrips.reduce((sum, t) => sum + (t.totalVolume || 0), 0);
+        const rate = transporter.ratePerCbm || 0;
+        const totalAmount = totalCbmTransported * rate;
+        
+        allTrucks.push({
+          contractorName: transporter.contractor || 'Unassigned',
+          transporterName: transporter.name || '',
+          transporterCode: transporter.code || '',
+          truckName: (truck as any).truckName || 'Unnamed',
+          plateNumber: truck.plateNumber || '',
+          transporterBillingCbm: (truck as any).transporterBillingCbm || truck.capacityCbm || 0,
+          dredgerBillingCbm: (truck as any).dredgerBillingCbm || truck.capacityCbm || 0,
+          rateCbm: rate,
+          totalTrips: totalTrips,
+          totalCbmTransported: totalCbmTransported,
+          totalAmount: totalAmount,
+        });
+      });
+    });
+
+    // Sort by Contractor → Transporter → Truck Name
+    allTrucks.sort((a, b) => {
+      const c = a.contractorName.localeCompare(b.contractorName);
+      if (c !== 0) return c;
+      const t = a.transporterName.localeCompare(b.transporterName);
+      if (t !== 0) return t;
+      return a.truckName.localeCompare(b.truckName);
+    });
+
+    let csv = 'Contractor Name,Transporter Name,Transporter Code,Truck Name,Plate Number,Transporter Billing CBM,Dredger Billing CBM,Rate/CBM,Total Trips,Total CBM Transported,Total Amount\n';
+    
+    allTrucks.forEach(t => {
+      csv += `"${t.contractorName}","${t.transporterName}","${t.transporterCode}","${t.truckName}","${t.plateNumber}",${t.transporterBillingCbm},${t.dredgerBillingCbm},${t.rateCbm},${t.totalTrips},${t.totalCbmTransported},${t.totalAmount}\n`;
+    });
+
+    // Add totals row
+    const grandTotalTrips = allTrucks.reduce((s, t) => s + t.totalTrips, 0);
+    const grandTotalCbm = allTrucks.reduce((s, t) => s + t.totalCbmTransported, 0);
+    const grandTotalAmount = allTrucks.reduce((s, t) => s + t.totalAmount, 0);
+    csv += `\n"","","","","TOTALS","","","",${grandTotalTrips},${grandTotalCbm},${grandTotalAmount}\n`;
+
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `trucks_report_${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+  };
+
   const exportToExcel = (type: "trips" | "dredgers" | "transporters" | "payments") => {
     let csv = "";
     let filename = "";
@@ -1874,7 +1934,14 @@ const DredgingDashboard: React.FC = () => {
           <div className="space-y-4">
             <div className="flex justify-between items-center flex-wrap gap-2">
               <h2 className="text-2xl font-bold">Transporters Management</h2>
-              <div className="flex space-x-2">
+              <div className="flex space-x-2 flex-wrap gap-2">
+                <button
+                  onClick={() => exportTrucksReport()}
+                  className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center space-x-2"
+                >
+                  <Download className="w-5 h-5" />
+                  <span>Download Trucks Report</span>
+                </button>
                 <button
                   onClick={() => downloadTemplate("transporters")}
                   className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 flex items-center space-x-2"
@@ -3408,4 +3475,3 @@ export function App() {
 }
 
 export default App;
-
