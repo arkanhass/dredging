@@ -1189,10 +1189,22 @@ const DredgingDashboard: React.FC = () => {
           t.transporterId === transporter.id && 
           (t.truckId === truck.id || t.plateNumber === truck.plateNumber)
         );
+        
+        if (truckTrips.length === 0) return; // Only include trucks with activity
+
         const totalTrips = truckTrips.reduce((sum, t) => sum + (t.trips || 0), 0);
-        const totalCbmTransported = truckTrips.reduce((sum, t) => sum + (t.totalVolume || 0), 0);
-        const rate = transporter.ratePerCbm || 0;
-        const totalAmount = totalCbmTransported * rate;
+        const totalAmount = truckTrips.reduce((sum, t) => sum + (t.transporterAmount || 0), 0);
+        
+        // Calculate actual average billing CBMs and rates from the trips themselves
+        const totalTransporterBillingCbm = truckTrips.reduce((sum, t) => sum + ((t.transporterBillingCbm || t.capacityCbm || 0) * (t.trips || 0)), 0);
+        const avgTransporterBillingCbm = totalTrips > 0 ? totalTransporterBillingCbm / totalTrips : 0;
+        
+        const totalDredgerBillingCbm = truckTrips.reduce((sum, t) => sum + ((t.dredgerBillingCbm || t.capacityCbm || 0) * (t.trips || 0)), 0);
+        const avgDredgerBillingCbm = totalTrips > 0 ? totalDredgerBillingCbm / totalTrips : 0;
+
+        // Rate per CBM = Total Amount / Total Billing Volume
+        const totalBillingVolume = truckTrips.reduce((sum, t) => sum + ((t.transporterBillingCbm || t.capacityCbm || 0) * (t.trips || 0)), 0);
+        const avgRate = totalBillingVolume > 0 ? totalAmount / totalBillingVolume : (transporter.ratePerCbm || 0);
         
         allTrucks.push({
           contractorName: transporter.contractor || 'Unassigned',
@@ -1200,11 +1212,11 @@ const DredgingDashboard: React.FC = () => {
           transporterCode: transporter.code || '',
           truckName: (truck as any).truckName || 'Unnamed',
           plateNumber: truck.plateNumber || '',
-          transporterBillingCbm: (truck as any).transporterBillingCbm || truck.capacityCbm || 0,
-          dredgerBillingCbm: (truck as any).dredgerBillingCbm || truck.capacityCbm || 0,
-          rateCbm: rate,
+          transporterBillingCbm: avgTransporterBillingCbm,
+          dredgerBillingCbm: avgDredgerBillingCbm,
+          rateCbm: avgRate,
           totalTrips: totalTrips,
-          totalCbmTransported: totalCbmTransported,
+          totalCbmTransported: totalBillingVolume,
           totalAmount: totalAmount,
         });
       });
@@ -1219,17 +1231,17 @@ const DredgingDashboard: React.FC = () => {
       return a.truckName.localeCompare(b.truckName);
     });
 
-    let csv = 'Contractor Name,Transporter Name,Transporter Code,Truck Name,Plate Number,Transporter Billing CBM,Dredger Billing CBM,Rate/CBM,Total Trips,Total CBM Transported,Total Amount\n';
+    let csv = 'Contractor Name,Transporter Name,Transporter Code,Truck Name,Plate Number,Transporter Billing CBM,Dredger Billing CBM,Rate/CBM,Total Trips,Total Billing Volume (CBM),Total Amount\n';
     
     allTrucks.forEach(t => {
-      csv += `"${t.contractorName}","${t.transporterName}","${t.transporterCode}","${t.truckName}","${t.plateNumber}",${t.transporterBillingCbm},${t.dredgerBillingCbm},${t.rateCbm},${t.totalTrips},${t.totalCbmTransported},${t.totalAmount}\n`;
+      csv += `"${t.contractorName}","${t.transporterName}","${t.transporterCode}","${t.truckName}","${t.plateNumber}",${t.transporterBillingCbm.toFixed(2)},${t.dredgerBillingCbm.toFixed(2)},${t.rateCbm.toFixed(2)},${t.totalTrips},${t.totalCbmTransported.toFixed(2)},${t.totalAmount.toFixed(2)}\n`;
     });
 
     // Add totals row
     const grandTotalTrips = allTrucks.reduce((s, t) => s + t.totalTrips, 0);
     const grandTotalCbm = allTrucks.reduce((s, t) => s + t.totalCbmTransported, 0);
     const grandTotalAmount = allTrucks.reduce((s, t) => s + t.totalAmount, 0);
-    csv += `\n"","","","","TOTALS","","","",${grandTotalTrips},${grandTotalCbm},${grandTotalAmount}\n`;
+    csv += `\n"","","","","TOTALS","","","",${grandTotalTrips},${grandTotalCbm.toFixed(2)},${grandTotalAmount.toFixed(2)}\n`;
 
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
