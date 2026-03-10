@@ -1195,15 +1195,26 @@ const DredgingDashboard: React.FC = () => {
         const totalAmount = truckTrips.reduce((sum, t) => sum + (t.transporterAmount || 0), 0);
         
         // Calculate actual average billing CBMs and rates from the trips themselves
-        const totalTransporterBillingCbm = truckTrips.reduce((sum, t) => sum + ((t.transporterBillingCbm || t.capacityCbm || 0) * (t.trips || 0)), 0);
-        const avgTransporterBillingCbm = totalTrips > 0 ? totalTransporterBillingCbm / totalTrips : 0;
+        // Transporter billing volume: Sum of (Transporter Billing CBM * Trips)
+        const totalTransporterBillingVol = truckTrips.reduce((sum, t) => {
+          const tBill = Number.isFinite(t.transporterBillingCbm) && t.transporterBillingCbm > 0
+            ? t.transporterBillingCbm
+            : (truck.transporterBillingCbm || truck.capacityCbm || 0);
+          return sum + (tBill * (t.trips || 0));
+        }, 0);
+        const avgTransporterBillingCbm = totalTrips > 0 ? totalTransporterBillingVol / totalTrips : 0;
         
-        const totalDredgerBillingCbm = truckTrips.reduce((sum, t) => sum + ((t.dredgerBillingCbm || t.capacityCbm || 0) * (t.trips || 0)), 0);
-        const avgDredgerBillingCbm = totalTrips > 0 ? totalDredgerBillingCbm / totalTrips : 0;
+        // Dredger billing volume: Sum of (Dredger Billing CBM * Trips)
+        const totalDredgerBillingVol = truckTrips.reduce((sum, t) => {
+          const dBill = Number.isFinite(t.dredgerBillingCbm) && t.dredgerBillingCbm > 0
+            ? t.dredgerBillingCbm
+            : (truck.dredgerBillingCbm || truck.capacityCbm || 0);
+          return sum + (dBill * (t.trips || 0));
+        }, 0);
+        const avgDredgerBillingCbm = totalTrips > 0 ? totalDredgerBillingVol / totalTrips : 0;
 
-        // Rate per CBM = Total Amount / Total Billing Volume
-        const totalBillingVolume = truckTrips.reduce((sum, t) => sum + ((t.transporterBillingCbm || t.capacityCbm || 0) * (t.trips || 0)), 0);
-        const avgRate = totalBillingVolume > 0 ? totalAmount / totalBillingVolume : (transporter.ratePerCbm || 0);
+        // Rate per CBM = Total Amount / Total Transporter Billing Volume
+        const avgRate = totalTransporterBillingVol > 0 ? totalAmount / totalTransporterBillingVol : (transporter.ratePerCbm || 0);
         
         allTrucks.push({
           contractorName: transporter.contractor || 'Unassigned',
@@ -1215,32 +1226,28 @@ const DredgingDashboard: React.FC = () => {
           dredgerBillingCbm: avgDredgerBillingCbm,
           rateCbm: avgRate,
           totalTrips: totalTrips,
-          totalCbmTransported: totalBillingVolume,
+          totalBillingVolume: totalTransporterBillingVol,
           totalAmount: totalAmount,
         });
       });
     });
 
-    // Sort by Contractor → Transporter → Truck Name (Natural Sort)
+    // Sort hierarchy should be ONLY by Truck Name (Natural Sort)
     allTrucks.sort((a, b) => {
-      const c = a.contractorName.localeCompare(b.contractorName);
-      if (c !== 0) return c;
-      const t = a.transporterName.localeCompare(b.transporterName);
-      if (t !== 0) return t;
       return a.truckName.localeCompare(b.truckName, undefined, { numeric: true, sensitivity: 'base' });
     });
 
-    let csv = 'Contractor Name,Transporter Name,Transporter Code,Truck Name,Plate Number,Transporter Billing CBM,Dredger Billing CBM,Rate/CBM,Total Trips,Total Billing Volume (CBM),Total Amount\n';
+    let csv = 'Truck Name,Plate Number,Contractor Name,Transporter Name,Transporter Code,Transporter Billing CBM,Dredger Billing CBM,Rate/CBM,Total Trips,Total Billing Volume (CBM),Total Amount\n';
     
     allTrucks.forEach(t => {
-      csv += `"${t.contractorName}","${t.transporterName}","${t.transporterCode}","${t.truckName}","${t.plateNumber}",${t.transporterBillingCbm.toFixed(2)},${t.dredgerBillingCbm.toFixed(2)},${t.rateCbm.toFixed(2)},${t.totalTrips},${t.totalCbmTransported.toFixed(2)},${t.totalAmount.toFixed(2)}\n`;
+      csv += `"${t.truckName}","${t.plateNumber}","${t.contractorName}","${t.transporterName}","${t.transporterCode}",${t.transporterBillingCbm.toFixed(2)},${t.dredgerBillingCbm.toFixed(2)},${t.rateCbm.toFixed(2)},${t.totalTrips},${t.totalBillingVolume.toFixed(2)},${t.totalAmount.toFixed(2)}\n`;
     });
 
     // Add totals row
     const grandTotalTrips = allTrucks.reduce((s, t) => s + t.totalTrips, 0);
-    const grandTotalCbm = allTrucks.reduce((s, t) => s + t.totalCbmTransported, 0);
+    const grandTotalCbm = allTrucks.reduce((s, t) => s + t.totalBillingVolume, 0);
     const grandTotalAmount = allTrucks.reduce((s, t) => s + t.totalAmount, 0);
-    csv += `\n"","","","","TOTALS","","","",${grandTotalTrips},${grandTotalCbm.toFixed(2)},${grandTotalAmount.toFixed(2)}\n`;
+    csv += `\n"TOTALS","","","","",,"",,${grandTotalTrips},${grandTotalCbm.toFixed(2)},${grandTotalAmount.toFixed(2)}\n`;
 
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
