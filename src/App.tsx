@@ -524,6 +524,7 @@ const DredgingDashboard: React.FC = () => {
   const latestTripDisplay = latestTripIso ? formatDateSlash(latestTripIso) : "";
 
 
+
   // Google Apps Script URL
   const APPS_SCRIPT_URL =
     "https://script.google.com/macros/s/AKfycbytcTFRquKWvg6ZnUf_HDbyNp0DOtA4cB7UWfOa577SKEMKkPi7nli_uslOpv3zUikV_g/exec";
@@ -564,25 +565,29 @@ const DredgingDashboard: React.FC = () => {
   // CRUD Operations
   const saveDredger = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (editingItem) {
-      setDredgers((prev) => prev.map((d) => (d.id === editingItem.id ? { ...d, ...dredgerForm } as Dredger : d)));
+
+    // CLOSE MODAL AND UPDATE UI IMMEDIATELY
+    setShowDredgerModal(false);
+    const editingId = editingItem?.id;
+    const form = { ...dredgerForm };
+    setEditingItem(null);
+    setDredgerForm({});
+
+    if (editingId) {
+      setDredgers((prev) => prev.map((d) => (d.id === editingId ? { ...d, ...form } as Dredger : d)));
     } else {
-      const newDredger = { ...dredgerForm, id: `temp-${Date.now()}` } as Dredger;
+      const newDredger = { ...form, id: `temp-${Date.now()}` } as Dredger;
       setDredgers((prev) => [...prev, newDredger]);
     }
 
     const dredgerData = {
-      Code: dredgerForm.code,
-      Name: dredgerForm.name,
-      RatePerCbm: dredgerForm.ratePerCbm,
-      Status: dredgerForm.status || "active",
-      Contractor: dredgerForm.contractor || "",
-      ContractNumber: dredgerForm.contractNumber || "",
+      Code: form.code,
+      Name: form.name,
+      RatePerCbm: form.ratePerCbm,
+      Status: form.status || "active",
+      Contractor: form.contractor || "",
+      ContractNumber: form.contractNumber || "",
     };
-
-    setShowDredgerModal(false);
-    setEditingItem(null);
-    setDredgerForm({});
 
     submitToAppsScript("saveDredger", dredgerData, () => {
       console.log("Dredger saved to sheet");
@@ -591,29 +596,33 @@ const DredgingDashboard: React.FC = () => {
 
   const saveTransporter = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (editingItem) {
-      setTransporters((prev) => prev.map((t) => (t.id === editingItem.id ? { ...t, ...transporterForm } as Transporter : t)));
+
+    // CLOSE MODAL AND UPDATE UI IMMEDIATELY
+    setShowTransporterModal(false);
+    const editingId = editingItem?.id;
+    const form = { ...transporterForm };
+    setEditingItem(null);
+    setTransporterForm({});
+
+    if (editingId) {
+      setTransporters((prev) => prev.map((t) => (t.id === editingId ? { ...t, ...form } as Transporter : t)));
     } else {
-      const newTransporter = { ...transporterForm, id: `temp-${Date.now()}`, trucks: [] } as Transporter;
+      const newTransporter = { ...form, id: `temp-${Date.now()}`, trucks: [] } as Transporter;
       setTransporters((prev) => [...prev, newTransporter]);
     }
 
     const transporterData = {
-      Code: transporterForm.code,
-      Name: transporterForm.name,
-      RatePerCbm: transporterForm.ratePerCbm,
-      Status: transporterForm.status || "active",
-      Contractor: transporterForm.contractor || "",
-      ContractNumber: transporterForm.contractNumber || "",
-      PlateNumber: "", // Empty for the main transporter entry
+      Code: form.code,
+      Name: form.name,
+      RatePerCbm: form.ratePerCbm,
+      Status: form.status || "active",
+      Contractor: form.contractor || "",
+      ContractNumber: form.contractNumber || "",
+      PlateNumber: "", // Empty for main entry
       TransporterBillingCbm: 0,
       DredgerBillingCbm: 0,
       TruckName: ""
     };
-
-    setShowTransporterModal(false);
-    setEditingItem(null);
-    setTransporterForm({});
 
     submitToAppsScript("saveTransporter", transporterData, () => {
       console.log("Transporter saved to sheet");
@@ -674,58 +683,61 @@ const DredgingDashboard: React.FC = () => {
       notes: tripForm.notes || "",
     };
 
-    // Optimistic UI update
-    if (editingItem) {
-      setTrips((prev) => prev.map((t) => (t.id === editingItem.id ? newTrip : t)));
+    // CLOSE MODAL AND UPDATE UI IMMEDIATELY
+    setShowTripModal(false);
+    const editingId = editingItem?.id;
+    const oldItem = editingItem;
+    setEditingItem(null);
+    setTripForm({});
+
+    if (editingId) {
+      setTrips((prev) => prev.map((t) => (t.id === editingId ? newTrip : t)));
     } else {
       setTrips((prev) => [...prev, newTrip]);
     }
 
-    // For editing, we must delete the old row first in Google Sheets
-    // because saveTrip in Apps Script only appends.
-    if (editingItem) {
-      const oldDredger = dredgers.find(d => d.id === editingItem.dredgerId);
-      const deleteData = {
-        date: editingItem.date,
-        dredgerCode: oldDredger?.code || ""
+    // Now handle the server-side update in the background
+    (async () => {
+      if (oldItem) {
+        const oldDredger = dredgers.find(d => d.id === oldItem.dredgerId);
+        const deleteData = {
+          date: oldItem.date,
+          dredgerCode: oldDredger?.code || ""
+        };
+        
+        try {
+          await fetch(APPS_SCRIPT_URL, {
+            method: "POST",
+            mode: "no-cors",
+            headers: { "Content-Type": "text/plain" },
+            body: JSON.stringify({ action: "deleteTrip", data: deleteData }),
+          });
+          await new Promise(resolve => setTimeout(resolve, 1500));
+        } catch (err) {
+          console.error("Error deleting old trip:", err);
+        }
+      }
+
+      const tripData = {
+        Date: newTrip.date,
+        DredgerCode: dredger?.code || "",
+        TransporterCode: transporter?.code || "",
+        PlateNumber: truck?.plateNumber || "",
+        Trips: tripsCount,
+        DredgerRate: dredgerRate,
+        TransporterRate: transporterRate,
+        DumpingLocation: newTrip.dumpingLocation || "",
+        Notes: newTrip.notes || "",
+        DredgerAmount: dredgerAmount,
+        TransporterAmount: transporterAmount,
+        TransporterBillingCbm: transporterBillingCbm,
+        DredgerBillingCbm: dredgerBillingCbm,
       };
-      
-      // Call deleteTrip first
-      await fetch(APPS_SCRIPT_URL, {
-        method: "POST",
-        mode: "no-cors",
-        headers: { "Content-Type": "text/plain" },
-        body: JSON.stringify({ action: "deleteTrip", data: deleteData }),
-      });
-      
-      // Wait for Apps Script to process the deletion
-      await new Promise(resolve => setTimeout(resolve, 2000));
-    }
 
-    const tripData = {
-      Date: tripForm.date,
-      DredgerCode: dredger?.code || "",
-      TransporterCode: transporter?.code || "",
-      PlateNumber: truck?.plateNumber || "",
-      Trips: tripsCount,
-      DredgerRate: dredgerRate,
-      TransporterRate: transporterRate,
-      DumpingLocation: tripForm.dumpingLocation || "",
-      Notes: tripForm.notes || "",
-      DredgerAmount: dredgerAmount,
-      TransporterAmount: transporterAmount,
-      TransporterBillingCbm: transporterBillingCbm,
-      DredgerBillingCbm: dredgerBillingCbm,
-    };
-
-    setShowTripModal(false);
-    setEditingItem(null);
-    setTripForm({});
-
-    // Now call saveTrip to append the new/updated data
-    submitToAppsScript("saveTrip", tripData, () => {
-      console.log(`Trip ${editingItem ? 'updated' : 'saved'} in sheet`);
-    }, false);
+      submitToAppsScript("saveTrip", tripData, () => {
+        console.log(`Trip saved/updated in sheet`);
+      }, false);
+    })();
   };
 
   const savePayment = async (e?: React.FormEvent) => {
@@ -754,9 +766,15 @@ const DredgingDashboard: React.FC = () => {
       notes: paymentForm.notes || "",
     };
 
+    // CLOSE MODAL AND UPDATE UI IMMEDIATELY
+    setShowPaymentModal(false);
+    const oldItem = editingItem;
+    const form = { ...paymentForm };
+    setEditingItem(null);
+    setPaymentForm({});
 
-    if (editingItem) {
-      setPayments((prev) => prev.map((p) => (p.id === editingItem.id ? newPayment : p)));
+    if (oldItem) {
+      setPayments((prev) => prev.map((p) => (p.id === oldItem.id ? newPayment : p)));
     } else {
       setPayments((prev) => [...prev, newPayment]);
     }
@@ -764,43 +782,42 @@ const DredgingDashboard: React.FC = () => {
     const capitalizeFirst = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : "");
 
     const paymentData: any = {
-      Date: paymentForm.date,
-      EntityType: capitalizeFirst(paymentForm.entityType || "dredger"),
+      Date: form.date,
+      EntityType: capitalizeFirst(form.entityType || "dredger"),
       EntityCode: entityCode,
-      Amount: paymentForm.amount,
-      PaymentMethod: paymentForm.paymentMethod || "Bank Transfer",
+      Amount: form.amount,
+      PaymentMethod: form.paymentMethod || "Bank Transfer",
       Reference: newPayment.reference,
-      Notes: paymentForm.notes || "",
+      Notes: form.notes || "",
     };
 
-    setShowPaymentModal(false);
-    setEditingItem(null);
-    setPaymentForm({});
+    // Background processing
+    (async () => {
+      if (oldItem) {
+        const oldReference = (oldItem.reference || "").trim();
+        const newReference = (paymentData.Reference || "").trim();
 
-    if (editingItem) {
-      const oldReference = (editingItem.reference || "").trim();
-      const newReference = (paymentData.Reference || "").trim();
+        const post = async (action: string, data: any) => {
+          try {
+            await fetch(APPS_SCRIPT_URL, {
+              method: "POST",
+              mode: "no-cors",
+              headers: { "Content-Type": "text/plain" },
+              body: JSON.stringify({ action, data }),
+            });
+          } catch (err) {
+            console.warn(`${action} request sent (no-cors):`, err);
+          }
+        };
 
-      const post = async (action: string, data: any) => {
-        try {
-          await fetch(APPS_SCRIPT_URL, {
-            method: "POST",
-            mode: "no-cors",
-            headers: { "Content-Type": "text/plain" },
-            body: JSON.stringify({ action, data }),
-          });
-        } catch (err) {
-          console.warn(`${action} request sent (no-cors):`, err);
-        }
-      };
-
-      await post("deletePayment", { Reference: oldReference, reference: oldReference });
-      await new Promise((resolve) => setTimeout(resolve, 5200));
-      await post("savePayment", { ...paymentData, Reference: newReference || oldReference, reference: newReference || oldReference });
-      setTimeout(() => loadDataFromSheets(), 5200);
-    } else {
-      submitToAppsScript("savePayment", paymentData, () => {}, true);
-    }
+        await post("deletePayment", { Reference: oldReference, reference: oldReference });
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+        await post("savePayment", { ...paymentData, Reference: newReference || oldReference, reference: newReference || oldReference });
+        setTimeout(() => loadDataFromSheets(), 4000);
+      } else {
+        submitToAppsScript("savePayment", paymentData, () => {}, true);
+      }
+    })();
   };
 
   const deleteItem = async (type: "dredger" | "transporter" | "trip" | "payment", id: string) => {
@@ -876,13 +893,18 @@ const DredgingDashboard: React.FC = () => {
       TruckName: truckForm.truckName?.trim() || "Unnamed",
     };
 
+    // CLOSE MODAL AND UPDATE UI IMMEDIATELY
+    setShowAddTruckModal(false);
+    const form = { ...truckForm };
+    setTruckForm({ transporterId: "" });
+
     // Correctly add the new truck locally
     const newTruck: TruckRecord = {
       id: `${transporter.code}-${truckData.PlateNumber}`,
       plateNumber: truckData.PlateNumber,
       capacityCbm: dBilling || tBilling || 0,
       transporterId: transporter.id,
-      status: truckForm.status || "active",
+      status: form.status || "active",
       truckName: truckData.TruckName,
       transporterBillingCbm: tBilling,
       dredgerBillingCbm: dBilling,
@@ -898,10 +920,8 @@ const DredgingDashboard: React.FC = () => {
           : t
       )
     );
-
-    setShowAddTruckModal(false);
     
-    // Explicitly call saveTransporter with new truck data
+    // Explicitly call saveTransporter with new truck data in background
     submitToAppsScript(
       "saveTransporter",
       truckData,
