@@ -1182,24 +1182,8 @@ const DredgingDashboard: React.FC = () => {
         const totalTrips = truckTrips.reduce((sum, t) => sum + (t.trips || 0), 0);
         const totalAmount = truckTrips.reduce((sum, t) => sum + (t.transporterAmount || 0), 0);
         
-        // Strictly get values for display
+        // Strictly get values for display from truck profile
         const getDisplayVal = (type: 'transporter' | 'dredger') => {
-          // Check trips for this specific truck for any override values
-          const tripsWithVal = truckTrips.filter(t => {
-            const val = type === 'transporter' ? t.transporterBillingCbm : t.dredgerBillingCbm;
-            return val !== undefined && val !== null && val > 0;
-          });
-
-          if (tripsWithVal.length > 0) {
-            const sum = tripsWithVal.reduce((s, t) => {
-              const val = type === 'transporter' ? t.transporterBillingCbm : t.dredgerBillingCbm;
-              return s + (val! * (t.trips || 0));
-            }, 0);
-            const tCount = tripsWithVal.reduce((s, t) => s + (t.trips || 0), 0);
-            return tCount > 0 ? (sum / tCount).toFixed(2) : "";
-          }
-
-          // If no trip overrides, check the truck profile
           const profileVal = type === 'transporter' ? truck.transporterBillingCbm : truck.dredgerBillingCbm;
           return (profileVal !== undefined && profileVal !== null && profileVal > 0) ? profileVal.toString() : "";
         };
@@ -1244,17 +1228,8 @@ const DredgingDashboard: React.FC = () => {
       const totalAmount = truckTrips.reduce((sum, t) => sum + (t.transporterAmount || 0), 0);
 
       const getDisplayVal = (type: 'transporter' | 'dredger') => {
-        const tripsWithVal = truckTrips.filter(t => {
-          const val = type === 'transporter' ? t.transporterBillingCbm : t.dredgerBillingCbm;
-          return val !== undefined && val !== null && val > 0;
-        });
-        if (tripsWithVal.length === 0) return "";
-        const sum = tripsWithVal.reduce((s, t) => {
-          const val = type === 'transporter' ? t.transporterBillingCbm : t.dredgerBillingCbm;
-          return s + (val! * (t.trips || 0));
-        }, 0);
-        const tCount = tripsWithVal.reduce((s, t) => s + (t.trips || 0), 0);
-        return tCount > 0 ? (sum / tCount).toFixed(2) : "";
+        // Trucks only in trips don't have a profile, so return empty string
+        return "";
       };
 
       const tBillingStr = getDisplayVal('transporter');
