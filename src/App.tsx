@@ -355,18 +355,23 @@ const DredgingDashboard: React.FC = () => {
           const dredgerAmount = parseMoney(row[9]);
           const transporterAmount = parseMoney(row[10]);
 
-          // Internal calculation capacity: Dredger > Transporter > Profile Capacity > 0
-          const capacityCbm = dredgerBillingCbm || transporterBillingCbm || truck?.capacityCbm || 0;
+          // FOR INTERNAL LOGIC ONLY: 
+          // Use Dredger Override > Transporter Override > Profile Value > 0
+          const effTBilling = transporterBillingCbm !== null && transporterBillingCbm !== undefined 
+            ? transporterBillingCbm 
+            : (truck?.transporterBillingCbm || 0);
+          const effDBilling = dredgerBillingCbm !== null && dredgerBillingCbm !== undefined 
+            ? dredgerBillingCbm 
+            : (truck?.dredgerBillingCbm || effTBilling || 0);
 
-          const totalVolume = tripsCount * capacityCbm;
-          
+          const totalVolume = tripsCount * effDBilling;
           const billedTransporterAmount = transporterAmount !== null
             ? transporterAmount
-            : tripsCount * (transporterBillingCbm || 0) * transporterRate;
+            : tripsCount * effTBilling * transporterRate;
 
           const billedDredgerAmount = dredgerAmount !== null
             ? dredgerAmount
-            : tripsCount * (dredgerBillingCbm || 0) * dredgerRate;
+            : tripsCount * effDBilling * dredgerRate;
 
           return {
             id: `trip-${i}`,
@@ -376,14 +381,14 @@ const DredgingDashboard: React.FC = () => {
             truckId: truck?.id || "",
             plateNumber: (row[3] || "").toString().trim(), // Keep original formatting for display
             trips: tripsCount,
-            capacityCbm,
+            capacityCbm: effDBilling,
             totalVolume,
             dredgerRate,
             transporterRate,
             dredgerAmount: billedDredgerAmount,
             transporterAmount: billedTransporterAmount,
-            transporterBillingCbm: transporterBillingCbm ?? undefined,
-            dredgerBillingCbm: dredgerBillingCbm ?? undefined,
+            transporterBillingCbm: transporterBillingCbm ?? undefined, // Store EXACT value
+            dredgerBillingCbm: dredgerBillingCbm ?? undefined, // Store EXACT value
             dumpingLocation: row[7],
             notes: row[8] || "",
           } satisfies Trip;
@@ -1181,30 +1186,25 @@ const DredgingDashboard: React.FC = () => {
   const exportTrucksReport = () => {
     const allTrucks: any[] = [];
     
-    // Use a set to track processed plates to avoid duplicates
+    // 1. Capture ALL trucks from the Transporters profile
     const processedPlates = new Set<string>();
 
     transporters.forEach(transporter => {
       transporter.trucks.forEach(truck => {
         const plateKey = (truck.plateNumber || "").trim().toUpperCase();
-        if (!plateKey || processedPlates.has(plateKey)) return;
+        if (!plateKey) return;
         processedPlates.add(plateKey);
 
-        // Find all trips for this specific plate
         const truckTrips = trips.filter(t => (t.plateNumber || "").trim().toUpperCase() === plateKey);
-        
         const totalTrips = truckTrips.reduce((sum, t) => sum + (t.trips || 0), 0);
         const totalAmount = truckTrips.reduce((sum, t) => sum + (t.transporterAmount || 0), 0);
         
-        // Billing calculation logic
-        // If a truck has trips with overrides, we'll use the weighted average of those overrides.
-        // Otherwise, we use the truck profile's exact value.
-        
-        const getDisplayBilling = (type: 'transporter' | 'dredger') => {
-          // Check if any trips have an explicit override for this billing type
+        // Strictly get values for display
+        const getDisplayVal = (type: 'transporter' | 'dredger') => {
+          // Check trips for this specific truck for any override values
           const tripsWithVal = truckTrips.filter(t => {
             const val = type === 'transporter' ? t.transporterBillingCbm : t.dredgerBillingCbm;
-            return val !== undefined && val !== null;
+            return val !== undefined && val !== null && val > 0;
           });
 
           if (tripsWithVal.length > 0) {
@@ -1212,29 +1212,28 @@ const DredgingDashboard: React.FC = () => {
               const val = type === 'transporter' ? t.transporterBillingCbm : t.dredgerBillingCbm;
               return s + (val! * (t.trips || 0));
             }, 0);
-            const tripSum = tripsWithVal.reduce((s, t) => s + (t.trips || 0), 0);
-            return tripSum > 0 ? (sum / tripSum).toFixed(2) : "";
+            const tCount = tripsWithVal.reduce((s, t) => s + (t.trips || 0), 0);
+            return tCount > 0 ? (sum / tCount).toFixed(2) : "";
           }
 
-          // No overrides in trips? Use the truck profile exactly.
+          // If no trip overrides, check the truck profile
           const profileVal = type === 'transporter' ? truck.transporterBillingCbm : truck.dredgerBillingCbm;
-          return (profileVal !== undefined && profileVal !== null) ? profileVal.toString() : "";
+          return (profileVal !== undefined && profileVal !== null && profileVal > 0) ? profileVal.toString() : "";
         };
 
-        const tBillingStr = getDisplayBilling('transporter');
-        const dBillingStr = getDisplayBilling('dredger');
+        const tBillingStr = getDisplayVal('transporter');
+        const dBillingStr = getDisplayVal('dredger');
 
-        // Internal calculation for total volume (used for rate calculation and totals)
-        // This follows the logic: Trip Override > Profile Value > 0
-        const totalBillingVolume = truckTrips.reduce((sum, t) => {
-          const val = t.transporterBillingCbm !== undefined 
+        // Internal calculation for Volume/Amount
+        const totalBillingVol = truckTrips.reduce((sum, t) => {
+          const val = t.transporterBillingCbm !== undefined && t.transporterBillingCbm !== null 
             ? t.transporterBillingCbm 
             : (truck.transporterBillingCbm || 0);
           return sum + (val * (t.trips || 0));
         }, 0);
 
-        const avgRate = totalBillingVolume > 0 ? totalAmount / totalBillingVolume : (transporter.ratePerCbm || 0);
-        
+        const avgRate = totalBillingVol > 0 ? totalAmount / totalBillingVol : (transporter.ratePerCbm || 0);
+
         allTrucks.push({
           truckName: truck.truckName || "Unnamed",
           plateNumber: truck.plateNumber,
@@ -1245,13 +1244,13 @@ const DredgingDashboard: React.FC = () => {
           dredgerBillingCbm: dBillingStr,
           rateCbm: avgRate,
           totalTrips: totalTrips,
-          totalBillingVolume: totalBillingVolume,
+          totalBillingVolume: totalBillingVol,
           totalAmount: totalAmount,
         });
       });
     });
 
-    // Capture any trucks found in Trips but missing from Transporters profile
+    // 2. Capture any trucks from Trips that aren't in the profile
     trips.forEach(trip => {
       const plateKey = (trip.plateNumber || "").trim().toUpperCase();
       if (!plateKey || processedPlates.has(plateKey)) return;
@@ -1261,26 +1260,26 @@ const DredgingDashboard: React.FC = () => {
       const totalTrips = truckTrips.reduce((sum, t) => sum + (t.trips || 0), 0);
       const totalAmount = truckTrips.reduce((sum, t) => sum + (t.transporterAmount || 0), 0);
 
-      const getDisplayBilling = (type: 'transporter' | 'dredger') => {
+      const getDisplayVal = (type: 'transporter' | 'dredger') => {
         const tripsWithVal = truckTrips.filter(t => {
           const val = type === 'transporter' ? t.transporterBillingCbm : t.dredgerBillingCbm;
-          return val !== undefined && val !== null;
+          return val !== undefined && val !== null && val > 0;
         });
         if (tripsWithVal.length === 0) return "";
         const sum = tripsWithVal.reduce((s, t) => {
           const val = type === 'transporter' ? t.transporterBillingCbm : t.dredgerBillingCbm;
           return s + (val! * (t.trips || 0));
         }, 0);
-        const tripSum = tripsWithVal.reduce((s, t) => s + (t.trips || 0), 0);
-        return tripSum > 0 ? (sum / tripSum).toFixed(2) : "";
+        const tCount = tripsWithVal.reduce((s, t) => s + (t.trips || 0), 0);
+        return tCount > 0 ? (sum / tCount).toFixed(2) : "";
       };
 
-      const tBillingStr = getDisplayBilling('transporter');
-      const dBillingStr = getDisplayBilling('dredger');
+      const tBillingStr = getDisplayVal('transporter');
+      const dBillingStr = getDisplayVal('dredger');
 
-      const totalBillingVolume = truckTrips.reduce((sum, t) => sum + ((t.transporterBillingCbm || 0) * (t.trips || 0)), 0);
+      const totalBillingVol = truckTrips.reduce((sum, t) => sum + ((t.transporterBillingCbm || 0) * (t.trips || 0)), 0);
       const transporter = transporters.find(tr => tr.id === trip.transporterId || tr.code === trip.transporterId);
-      const avgRate = totalBillingVolume > 0 ? totalAmount / totalBillingVolume : (transporter?.ratePerCbm || 0);
+      const avgRate = totalBillingVol > 0 ? totalAmount / totalBillingVol : (transporter?.ratePerCbm || 0);
 
       allTrucks.push({
         truckName: "Unnamed",
@@ -1292,23 +1291,21 @@ const DredgingDashboard: React.FC = () => {
         dredgerBillingCbm: dBillingStr,
         rateCbm: avgRate,
         totalTrips: totalTrips,
-        totalBillingVolume: totalBillingVolume,
+        totalBillingVolume: totalBillingVol,
         totalAmount: totalAmount,
       });
     });
 
-    // Natural sort by Truck Name
+    // 3. Natural sort by Truck Name
     allTrucks.sort((a, b) => {
       return a.truckName.localeCompare(b.truckName, undefined, { numeric: true, sensitivity: 'base' });
     });
 
     let csv = 'Truck Name,Plate Number,Contractor Name,Transporter Name,Transporter Code,Transporter Billing CBM,Dredger Billing CBM,Rate/CBM,Total Trips,Total Billing Volume (CBM),Total Amount\n';
-    
     allTrucks.forEach(t => {
       csv += `"${t.truckName}","${t.plateNumber}","${t.contractorName}","${t.transporterName}","${t.transporterCode}",${t.transporterBillingCbm},${t.dredgerBillingCbm},${t.rateCbm.toFixed(2)},${t.totalTrips},${t.totalBillingVolume.toFixed(2)},${t.totalAmount.toFixed(2)}\n`;
     });
 
-    // Add totals row
     const grandTotalTrips = allTrucks.reduce((s, t) => s + t.totalTrips, 0);
     const grandTotalCbm = allTrucks.reduce((s, t) => s + t.totalBillingVolume, 0);
     const grandTotalAmount = allTrucks.reduce((s, t) => s + t.totalAmount, 0);
