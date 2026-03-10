@@ -339,25 +339,24 @@ const DredgingDashboard: React.FC = () => {
 
           const transporter = transporterMap.get(transporterCode);
           const truck = transporter?.trucks.find((t: any) => t.plateNumber === plateNumber);
-          // Sheet may or may not have billing CBMs; if present, row[11] = TransporterBillingCbm, row[12] = DredgerBillingCbm (from trips template)
-          const transporterBillingCbmRaw = parseMoney(row[11]);
-          const dredgerBillingCbmRaw = parseMoney(row[12]);
+          
+          // Transporter Billing CBM: Trip column > Truck profile > Truck Capacity
+          const tBillingRaw = parseMoney(row[11]);
+          const transporterBillingCbm = Number.isFinite(tBillingRaw) && tBillingRaw > 0
+            ? tBillingRaw
+            : (truck?.transporterBillingCbm || truck?.capacityCbm || 0);
 
-          // Dredger actual/billing capacity for volume (use dredger billing CBM if provided, else truck capacity)
-          const dredgerBillingCbm = Number.isFinite(dredgerBillingCbmRaw) && dredgerBillingCbmRaw > 0
-            ? dredgerBillingCbmRaw
-            : (truck?.dredgerBillingCbm || truck?.capacityCbm || 0);
+          // Dredger Billing CBM: Trip column > Truck profile > Transporter Billing CBM
+          const dBillingRaw = parseMoney(row[12]);
+          const dredgerBillingCbm = Number.isFinite(dBillingRaw) && dBillingRaw > 0
+            ? dBillingRaw
+            : (truck?.dredgerBillingCbm || transporterBillingCbm);
 
           const tripsCount = parseInt(row[4]) || 0;
           const dredgerRate = parseMoney(row[5]);
           const transporterRate = parseMoney(row[6]);
           const dredgerAmount = parseMoney(row[9]);
           const transporterAmount = parseMoney(row[10]);
-
-          // Transporter billed volume: sheet column overrides, else transporter setting, else dredger billing cbm
-          const transporterBillingCbm = Number.isFinite(transporterBillingCbmRaw) && transporterBillingCbmRaw > 0
-            ? transporterBillingCbmRaw
-            : (truck?.transporterBillingCbm || dredgerBillingCbm || 0);
 
           // Total volume uses dredger CBM
           const totalVolume = tripsCount * dredgerBillingCbm;
@@ -1222,13 +1221,13 @@ const DredgingDashboard: React.FC = () => {
       });
     });
 
-    // Sort by Contractor → Transporter → Truck Name
+    // Sort by Contractor → Transporter → Truck Name (Natural Sort)
     allTrucks.sort((a, b) => {
       const c = a.contractorName.localeCompare(b.contractorName);
       if (c !== 0) return c;
       const t = a.transporterName.localeCompare(b.transporterName);
       if (t !== 0) return t;
-      return a.truckName.localeCompare(b.truckName);
+      return a.truckName.localeCompare(b.truckName, undefined, { numeric: true, sensitivity: 'base' });
     });
 
     let csv = 'Contractor Name,Transporter Name,Transporter Code,Truck Name,Plate Number,Transporter Billing CBM,Dredger Billing CBM,Rate/CBM,Total Trips,Total Billing Volume (CBM),Total Amount\n';
