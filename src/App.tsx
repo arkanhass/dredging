@@ -1610,7 +1610,7 @@ const DredgingDashboard: React.FC = () => {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 gap-6">
               <div className="bg-white rounded-lg shadow">
                 <div className="p-4 border-b flex justify-between items-center">
                   <h3 className="font-bold text-lg">Dredger Summary</h3>
@@ -1619,14 +1619,15 @@ const DredgingDashboard: React.FC = () => {
                   </button>
                 </div>
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[600px] text-sm">
+                  <table className="w-full min-w-[800px] text-sm">
                     <thead className="bg-gray-50">
                       <tr>
-                        <th className="px-2 py-2 text-left font-medium text-gray-600">Dredger</th>
-                        <th className="px-2 py-2 text-right font-medium text-gray-600">Volume (CBM)</th>
-                        <th className="px-2 py-2 text-right font-medium text-gray-600">Amount</th>
-                        <th className="px-2 py-2 text-right font-medium text-gray-600">Paid</th>
-                        <th className="px-2 py-2 text-right font-medium text-gray-600">Balance</th>
+                        <th className="px-4 py-2 text-left font-medium text-gray-600">Dredgers</th>
+                        <th className="px-4 py-2 text-right font-medium text-gray-600">Volume (CBM)</th>
+                        <th className="px-4 py-2 text-right font-medium text-gray-600">Rate/CBM</th>
+                        <th className="px-4 py-2 text-right font-medium text-gray-600">Amount</th>
+                        <th className="px-4 py-2 text-right font-medium text-gray-600">Paid</th>
+                        <th className="px-4 py-2 text-right font-medium text-gray-600">Balance</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1634,15 +1635,16 @@ const DredgingDashboard: React.FC = () => {
                         const earnings = calculateDredgerEarnings(dredger.id, dashboardTrips, dashboardPayments);
                         return (
                           <tr key={dredger.id} className="border-t hover:bg-gray-50">
-                            <td className="px-2 py-2">
+                            <td className="px-4 py-2">
                               <div className="font-medium leading-snug">{dredger.name}</div>
                               <div className="text-xs text-gray-500">{dredger.code}</div>
                             </td>
-                            <td className="px-2 py-2 text-right">{earnings.totalVolume.toLocaleString()}</td>
-                            <td className="px-2 py-2 text-right">{formatCurrency(earnings.totalAmount)}</td>
-                            <td className="px-2 py-2 text-right text-green-600">{formatCurrency(earnings.totalPaid)}</td>
+                            <td className="px-4 py-2 text-right">{earnings.totalVolume.toLocaleString()}</td>
+                            <td className="px-4 py-2 text-right">{formatCurrency(dredger.ratePerCbm)}</td>
+                            <td className="px-4 py-2 text-right">{formatCurrency(earnings.totalAmount)}</td>
+                            <td className="px-4 py-2 text-right text-green-600">{formatCurrency(earnings.totalPaid)}</td>
                             <td
-                              className={`px-2 py-2 text-right font-medium ${
+                              className={`px-4 py-2 text-right font-medium ${
                                 earnings.balance > 0 ? "text-red-600" : "text-green-600"
                               }`}
                             >
@@ -1654,8 +1656,8 @@ const DredgingDashboard: React.FC = () => {
                     </tbody>
                     <tfoot className="bg-gray-100 font-bold border-t-2 border-gray-200">
                       <tr>
-                        <td className="px-2 py-2 text-gray-800">Totals</td>
-                        <td className="px-2 py-2 text-right text-blue-800">
+                        <td className="px-4 py-2 text-gray-800">Totals</td>
+                        <td className="px-4 py-2 text-right text-blue-800">
                           {dredgers
                             .reduce(
                               (sum, d) => sum + calculateDredgerEarnings(d.id, dashboardTrips, dashboardPayments).totalVolume,
@@ -1663,7 +1665,8 @@ const DredgingDashboard: React.FC = () => {
                             )
                             .toLocaleString()}
                         </td>
-                        <td className="px-2 py-2 text-right text-orange-700">
+                        <td className="px-4 py-2 text-right"></td>
+                        <td className="px-4 py-2 text-right text-orange-700">
                           {formatCurrency(
                             dredgers.reduce(
                               (sum, d) => sum + calculateDredgerEarnings(d.id, dashboardTrips, dashboardPayments).totalAmount,
@@ -1671,7 +1674,7 @@ const DredgingDashboard: React.FC = () => {
                             )
                           )}
                         </td>
-                        <td className="px-2 py-2 text-right text-green-700">
+                        <td className="px-4 py-2 text-right text-green-700">
                           {formatCurrency(
                             dredgers.reduce(
                               (sum, d) => sum + calculateDredgerEarnings(d.id, dashboardTrips, dashboardPayments).totalPaid,
@@ -1679,7 +1682,7 @@ const DredgingDashboard: React.FC = () => {
                             )
                           )}
                         </td>
-                        <td className="px-2 py-2 text-right text-red-700">
+                        <td className="px-4 py-2 text-right text-red-700">
                           {formatCurrency(
                             dredgers.reduce(
                               (sum, d) => sum + calculateDredgerEarnings(d.id, dashboardTrips, dashboardPayments).balance,
@@ -1693,22 +1696,25 @@ const DredgingDashboard: React.FC = () => {
                 </div>
               </div>
 
-                          <div className="bg-white rounded-lg shadow">
+              <div className="bg-white rounded-lg shadow">
                 <div className="p-4 border-b flex justify-between items-center">
-                  <h3 className="font-bold text-lg">Transporter Summary</h3>
+                  <h3 className="font-bold text-lg">Transporters Summary</h3>
                   <button onClick={() => setActiveTab("transporters")} className="text-blue-600 hover:underline text-sm">
                     View All
                   </button>
                 </div>
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[600px] text-sm">
+                  <table className="w-full min-w-[1000px] text-sm">
                     <thead className="bg-gray-50">
                       <tr>
-                        <th className="px-2 py-2 text-left font-medium text-gray-600">Contractor</th>
-                        <th className="px-2 py-2 text-right font-medium text-gray-600">Trips</th>
-                        <th className="px-2 py-2 text-right font-medium text-gray-600">Volume (CBM)</th>
-                        <th className="px-2 py-2 text-right font-medium text-gray-600">Amount</th>
-                        <th className="px-2 py-2 text-right font-medium text-gray-600">Balance</th>
+                        <th className="px-4 py-2 text-left font-medium text-gray-600">Contractor</th>
+                        <th className="px-4 py-2 text-right font-medium text-gray-600">Trips</th>
+                        <th className="px-4 py-2 text-right font-medium text-gray-600">Avg Vol/Truck</th>
+                        <th className="px-4 py-2 text-right font-medium text-gray-600">Avg Rate/CBM</th>
+                        <th className="px-4 py-2 text-right font-medium text-gray-600">Volume (CBM)</th>
+                        <th className="px-4 py-2 text-right font-medium text-gray-600">Amount</th>
+                        <th className="px-4 py-2 text-right font-medium text-gray-600">Paid</th>
+                        <th className="px-4 py-2 text-right font-medium text-gray-600">Balance</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1731,26 +1737,36 @@ const DredgingDashboard: React.FC = () => {
                           const stats = groupTransporters.reduce(
                             (acc, curr) => {
                               const tStats = calculateTransporterEarnings(curr.id, dashboardTrips, dashboardPayments);
+                              const truckCount = curr.trucks.length || 1;
                               return {
                                 trips: acc.trips + tStats.totalTrips,
                                 volume: acc.volume + tStats.totalVolume,
                                 amount: acc.amount + tStats.totalAmount,
+                                paid: acc.paid + tStats.totalPaid,
                                 balance: acc.balance + tStats.balance,
+                                totalRate: acc.totalRate + (curr.ratePerCbm || 0),
+                                totalTrucks: acc.totalTrucks + curr.trucks.length,
                               };
                             },
-                            { trips: 0, volume: 0, amount: 0, balance: 0 }
+                            { trips: 0, volume: 0, amount: 0, paid: 0, balance: 0, totalRate: 0, totalTrucks: 0 }
                           );
+
+                          const avgVolPerTruck = stats.totalTrucks > 0 ? stats.volume / stats.totalTrucks : 0;
+                          const avgRate = groupTransporters.length > 0 ? stats.totalRate / groupTransporters.length : 0;
 
                           return (
                             <tr key={displayName} className="border-t hover:bg-gray-50">
-                              <td className="px-2 py-2">
+                              <td className="px-4 py-2">
                                 <div className="font-medium leading-snug">{displayName}</div>
                               </td>
-                              <td className="px-2 py-2 text-right">{stats.trips.toLocaleString()}</td>
-                              <td className="px-2 py-2 text-right">{stats.volume.toLocaleString()}</td>
-                              <td className="px-2 py-2 text-right">{formatCurrency(stats.amount)}</td>
+                              <td className="px-4 py-2 text-right">{stats.trips.toLocaleString()}</td>
+                              <td className="px-4 py-2 text-right">{avgVolPerTruck.toFixed(2)}</td>
+                              <td className="px-4 py-2 text-right">{formatCurrency(avgRate)}</td>
+                              <td className="px-4 py-2 text-right">{stats.volume.toLocaleString()}</td>
+                              <td className="px-4 py-2 text-right">{formatCurrency(stats.amount)}</td>
+                              <td className="px-4 py-2 text-right text-green-600">{formatCurrency(stats.paid)}</td>
                               <td
-                                className={`px-2 py-2 text-right font-medium ${
+                                className={`px-4 py-2 text-right font-medium ${
                                   stats.balance > 0 ? "text-red-600" : "text-green-600"
                                 }`}
                               >
@@ -1763,18 +1779,20 @@ const DredgingDashboard: React.FC = () => {
                     </tbody>
                     <tfoot className="bg-gray-100 font-bold border-t-2 border-gray-200">
                       <tr>
-                        <td className="px-2 py-2 text-gray-800">Totals</td>
-                        <td className="px-2 py-2 text-right text-blue-800">
+                        <td className="px-4 py-2 text-gray-800">Totals</td>
+                        <td className="px-4 py-2 text-right text-blue-800">
                           {transporters
                             .reduce((sum, t) => sum + calculateTransporterEarnings(t.id, dashboardTrips, dashboardPayments).totalTrips, 0)
                             .toLocaleString()}
                         </td>
-                        <td className="px-2 py-2 text-right text-blue-800">
+                        <td className="px-4 py-2 text-right"></td>
+                        <td className="px-4 py-2 text-right"></td>
+                        <td className="px-4 py-2 text-right text-blue-800">
                           {transporters
                             .reduce((sum, t) => sum + calculateTransporterEarnings(t.id, dashboardTrips, dashboardPayments).totalVolume, 0)
                             .toLocaleString()}
                         </td>
-                        <td className="px-2 py-2 text-right text-purple-700">
+                        <td className="px-4 py-2 text-right text-purple-700">
                           {formatCurrency(
                             transporters.reduce(
                               (sum, t) => sum + calculateTransporterEarnings(t.id, dashboardTrips, dashboardPayments).totalAmount,
@@ -1782,7 +1800,15 @@ const DredgingDashboard: React.FC = () => {
                             )
                           )}
                         </td>
-                        <td className="px-2 py-2 text-right text-red-700">
+                        <td className="px-4 py-2 text-right text-green-700">
+                          {formatCurrency(
+                            transporters.reduce(
+                              (sum, t) => sum + calculateTransporterEarnings(t.id, dashboardTrips, dashboardPayments).totalPaid,
+                              0
+                            )
+                          )}
+                        </td>
+                        <td className="px-4 py-2 text-right text-red-700">
                           {formatCurrency(
                             transporters.reduce(
                               (sum, t) => sum + calculateTransporterEarnings(t.id, dashboardTrips, dashboardPayments).balance,
