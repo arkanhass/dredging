@@ -287,24 +287,24 @@ const DredgingDashboard: React.FC = () => {
       const transporterMap = new Map<string, any>();
 
       trRows.slice(1).forEach((row: any[]) => {
-        const code = row[0];
+        const code = (row[0] || "").toString().trim();
         if (!code) return;
 
         // Header Order: 0:Code | 1:Name | 2:Rate | 3:Status | 4:Contractor | 5:ContractNumber | 6:PlateNumber | 7:TransporterBillingCbm | 8:DredgerBillingCbm | 9:TruckName
-        const plateNumber = row[6] || "";
+        const plateNumber = (row[6] || "").toString().trim();
         const tBilling = parseMoney(row[7]);
         const dBilling = parseMoney(row[8]);
-        const truckName = row[9] || "Unnamed";
+        const truckName = (row[9] || "Unnamed").toString().trim();
 
         if (!transporterMap.has(code)) {
           transporterMap.set(code, {
             id: code,
             code,
-            name: row[1],
+            name: (row[1] || "").toString().trim(),
             ratePerCbm: parseMoney(row[2]),
-            status: (row[3] || "active").toLowerCase(),
-            contractor: row[4],
-            contractNumber: row[5],
+            status: (row[3] || "active").toString().toLowerCase().trim(),
+            contractor: (row[4] || "").toString().trim(),
+            contractNumber: (row[5] || "").toString().trim(),
             trucks: [],
           });
         }
@@ -315,7 +315,7 @@ const DredgingDashboard: React.FC = () => {
             id: `${code}-${plateNumber}`,
             truckName,
             plateNumber,
-            capacityCbm: dBilling || tBilling || 0, // Fallback logic
+            capacityCbm: dBilling || tBilling || 0,
             status: "active",
             transporterBillingCbm: tBilling,
             dredgerBillingCbm: dBilling,
@@ -333,9 +333,9 @@ const DredgingDashboard: React.FC = () => {
       setTrips(
         (tripData.values || []).slice(1).map((row: any[], i: number) => {
           const rawDate = row[0] || "";
-          const dredgerCode = row[1];
-          const transporterCode = row[2];
-          const plateNumber = row[3];
+          const dredgerCode = (row[1] || "").toString().trim();
+          const transporterCode = (row[2] || "").toString().trim();
+          const plateNumber = (row[3] || "").toString().trim();
 
           const transporter = transporterMap.get(transporterCode);
           const truck = transporter?.trucks.find((t: any) => t.plateNumber === plateNumber);
@@ -346,11 +346,17 @@ const DredgingDashboard: React.FC = () => {
             ? tBillingRaw
             : (truck?.transporterBillingCbm || truck?.capacityCbm || 0);
 
-          // Dredger Billing CBM: Trip column > Truck profile > Transporter Billing CBM
+          // Dredger Billing CBM: Trip column > Truck profile > Transporter Billing CBM (as last resort)
           const dBillingRaw = parseMoney(row[12]);
-          const dredgerBillingCbm = Number.isFinite(dBillingRaw) && dBillingRaw > 0
-            ? dBillingRaw
-            : (truck?.dredgerBillingCbm || transporterBillingCbm);
+          let dredgerBillingCbm = 0;
+          
+          if (Number.isFinite(dBillingRaw) && dBillingRaw > 0) {
+            dredgerBillingCbm = dBillingRaw;
+          } else if (truck && Number.isFinite(truck.dredgerBillingCbm) && truck.dredgerBillingCbm > 0) {
+            dredgerBillingCbm = truck.dredgerBillingCbm;
+          } else {
+            dredgerBillingCbm = transporterBillingCbm;
+          }
 
           const tripsCount = parseInt(row[4]) || 0;
           const dredgerRate = parseMoney(row[5]);
@@ -1197,19 +1203,13 @@ const DredgingDashboard: React.FC = () => {
         // Calculate actual average billing CBMs and rates from the trips themselves
         // Transporter billing volume: Sum of (Transporter Billing CBM * Trips)
         const totalTransporterBillingVol = truckTrips.reduce((sum, t) => {
-          const tBill = Number.isFinite(t.transporterBillingCbm) && t.transporterBillingCbm > 0
-            ? t.transporterBillingCbm
-            : (truck.transporterBillingCbm || truck.capacityCbm || 0);
-          return sum + (tBill * (t.trips || 0));
+          return sum + ((t.transporterBillingCbm || 0) * (t.trips || 0));
         }, 0);
         const avgTransporterBillingCbm = totalTrips > 0 ? totalTransporterBillingVol / totalTrips : 0;
         
         // Dredger billing volume: Sum of (Dredger Billing CBM * Trips)
         const totalDredgerBillingVol = truckTrips.reduce((sum, t) => {
-          const dBill = Number.isFinite(t.dredgerBillingCbm) && t.dredgerBillingCbm > 0
-            ? t.dredgerBillingCbm
-            : (truck.dredgerBillingCbm || truck.capacityCbm || 0);
-          return sum + (dBill * (t.trips || 0));
+          return sum + ((t.dredgerBillingCbm || 0) * (t.trips || 0));
         }, 0);
         const avgDredgerBillingCbm = totalTrips > 0 ? totalDredgerBillingVol / totalTrips : 0;
 
@@ -1220,7 +1220,7 @@ const DredgingDashboard: React.FC = () => {
           contractorName: transporter.contractor || 'Unassigned',
           transporterName: transporter.name || '',
           transporterCode: transporter.code || '',
-          truckName: (truck as any).truckName || 'Unnamed',
+          truckName: truck.truckName || 'Unnamed',
           plateNumber: truck.plateNumber || '',
           transporterBillingCbm: avgTransporterBillingCbm,
           dredgerBillingCbm: avgDredgerBillingCbm,
