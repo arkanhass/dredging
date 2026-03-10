@@ -672,6 +672,9 @@ const DredgingDashboard: React.FC = () => {
     }
 
     const tripData = {
+      actionType: editingItem ? "editTrip" : "saveTrip",
+      originalDate: editingItem ? editingItem.date : undefined,
+      originalDredgerCode: editingItem ? (dredgers.find(d => d.id === editingItem.dredgerId)?.code) : undefined,
       Date: tripForm.date,
       DredgerCode: dredger?.code || "",
       TransporterCode: transporter?.code || "",
@@ -691,7 +694,7 @@ const DredgingDashboard: React.FC = () => {
     setEditingItem(null);
     setTripForm({});
 
-    submitToAppsScript("saveTrip", tripData, () => {}, true);
+    submitToAppsScript(tripData.actionType, tripData, () => {}, true);
   };
 
   const savePayment = async (e?: React.FormEvent) => {
@@ -837,25 +840,24 @@ const DredgingDashboard: React.FC = () => {
       TruckName: truckForm.truckName?.trim() || "Unnamed",
     };
 
+    // Correctly add the new truck locally
+    const newTruck: TruckRecord = {
+      id: `${transporter.code}-${truckData.PlateNumber}`,
+      plateNumber: truckData.PlateNumber,
+      capacityCbm: dBilling || tBilling || 0,
+      transporterId: transporter.id,
+      status: truckForm.status || "active",
+      truckName: truckData.TruckName,
+      transporterBillingCbm: tBilling,
+      dredgerBillingCbm: dBilling,
+    };
+
     setTransporters((prev) =>
       prev.map((t) =>
         t.id === transporter.id
           ? {
               ...t,
-              trucks: [
-                ...t.trucks,
-                {
-                  ...truckData,
-                  id: `${t.code}-${truckData.PlateNumber}`,
-                  capacityCbm: dBilling,
-                  transporterId: t.id,
-                  status: truckForm.status || "active",
-                  transporterBillingCbm: tBilling,
-                  dredgerBillingCbm: dBilling,
-                  plateNumber: truckData.PlateNumber,
-                  truckName: truckData.TruckName,
-                } as TruckRecord,
-              ],
+              trucks: [...t.trucks, newTruck],
             }
           : t
       )
@@ -2220,13 +2222,17 @@ const DredgingDashboard: React.FC = () => {
                         <td className="px-4 py-3 text-right">
                           <div className="flex justify-end space-x-2">
                             <button
-                              onClick={() => {
-                                setEditingItem(trip);
-                                setTripForm(trip);
-                                setShowTripModal(true);
-                              }}
-                              className="p-1 text-blue-600 hover:bg-blue-50 rounded"
-                            >
+                            onClick={() => {
+                              const tripToEdit = {
+                                ...trip,
+                                date: toSortableISO(trip.date)
+                              };
+                              setEditingItem(tripToEdit);
+                              setTripForm(tripToEdit);
+                              setShowTripModal(true);
+                            }}
+                            className="p-1 text-blue-600 hover:bg-blue-50 rounded"
+                          >
                               <Edit className="w-4 h-4" />
                             </button>
                             <button
