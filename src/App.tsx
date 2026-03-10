@@ -1708,10 +1708,10 @@ const DredgingDashboard: React.FC = () => {
                     <thead className="bg-gray-50">
                       <tr>
                         <th className="px-4 py-2 text-left font-medium text-gray-600">Contractor</th>
-                        <th className="px-4 py-2 text-right font-medium text-gray-600">Trips</th>
-                        <th className="px-4 py-2 text-right font-medium text-gray-600">Avg Vol/Truck</th>
-                        <th className="px-4 py-2 text-right font-medium text-gray-600">Avg Rate/CBM</th>
                         <th className="px-4 py-2 text-right font-medium text-gray-600">Volume (CBM)</th>
+                        <th className="px-4 py-2 text-right font-medium text-gray-600">Trips</th>
+                        <th className="px-4 py-2 text-right font-medium text-gray-600">Average Volume/Truck</th>
+                        <th className="px-4 py-2 text-right font-medium text-gray-600">Average Rate/CBM</th>
                         <th className="px-4 py-2 text-right font-medium text-gray-600">Amount</th>
                         <th className="px-4 py-2 text-right font-medium text-gray-600">Paid</th>
                         <th className="px-4 py-2 text-right font-medium text-gray-600">Balance</th>
@@ -1737,32 +1737,32 @@ const DredgingDashboard: React.FC = () => {
                           const stats = groupTransporters.reduce(
                             (acc, curr) => {
                               const tStats = calculateTransporterEarnings(curr.id, dashboardTrips, dashboardPayments);
-                              const truckCount = curr.trucks.length || 1;
                               return {
                                 trips: acc.trips + tStats.totalTrips,
                                 volume: acc.volume + tStats.totalVolume,
                                 amount: acc.amount + tStats.totalAmount,
                                 paid: acc.paid + tStats.totalPaid,
                                 balance: acc.balance + tStats.balance,
-                                totalRate: acc.totalRate + (curr.ratePerCbm || 0),
-                                totalTrucks: acc.totalTrucks + curr.trucks.length,
                               };
                             },
-                            { trips: 0, volume: 0, amount: 0, paid: 0, balance: 0, totalRate: 0, totalTrucks: 0 }
+                            { trips: 0, volume: 0, amount: 0, paid: 0, balance: 0 }
                           );
 
-                          const avgVolPerTruck = stats.totalTrucks > 0 ? stats.volume / stats.totalTrucks : 0;
-                          const avgRate = groupTransporters.length > 0 ? stats.totalRate / groupTransporters.length : 0;
+                          // Calculations based on user feedback
+                          // Avg Vol/Truck = Total Volume / Total Trips
+                          const avgVolPerTrip = stats.trips > 0 ? stats.volume / stats.trips : 0;
+                          // Avg Rate/CBM = Total Amount / Total Volume
+                          const avgRate = stats.volume > 0 ? stats.amount / stats.volume : 0;
 
                           return (
                             <tr key={displayName} className="border-t hover:bg-gray-50">
                               <td className="px-4 py-2">
                                 <div className="font-medium leading-snug">{displayName}</div>
                               </td>
-                              <td className="px-4 py-2 text-right">{stats.trips.toLocaleString()}</td>
-                              <td className="px-4 py-2 text-right">{avgVolPerTruck.toFixed(2)}</td>
-                              <td className="px-4 py-2 text-right">{formatCurrency(avgRate)}</td>
                               <td className="px-4 py-2 text-right">{stats.volume.toLocaleString()}</td>
+                              <td className="px-4 py-2 text-right">{stats.trips.toLocaleString()}</td>
+                              <td className="px-4 py-2 text-right">{avgVolPerTrip.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                              <td className="px-4 py-2 text-right">{formatCurrency(avgRate)}</td>
                               <td className="px-4 py-2 text-right">{formatCurrency(stats.amount)}</td>
                               <td className="px-4 py-2 text-right text-green-600">{formatCurrency(stats.paid)}</td>
                               <td
@@ -1782,16 +1782,16 @@ const DredgingDashboard: React.FC = () => {
                         <td className="px-4 py-2 text-gray-800">Totals</td>
                         <td className="px-4 py-2 text-right text-blue-800">
                           {transporters
+                            .reduce((sum, t) => sum + calculateTransporterEarnings(t.id, dashboardTrips, dashboardPayments).totalVolume, 0)
+                            .toLocaleString()}
+                        </td>
+                        <td className="px-4 py-2 text-right text-blue-800">
+                          {transporters
                             .reduce((sum, t) => sum + calculateTransporterEarnings(t.id, dashboardTrips, dashboardPayments).totalTrips, 0)
                             .toLocaleString()}
                         </td>
                         <td className="px-4 py-2 text-right"></td>
                         <td className="px-4 py-2 text-right"></td>
-                        <td className="px-4 py-2 text-right text-blue-800">
-                          {transporters
-                            .reduce((sum, t) => sum + calculateTransporterEarnings(t.id, dashboardTrips, dashboardPayments).totalVolume, 0)
-                            .toLocaleString()}
-                        </td>
                         <td className="px-4 py-2 text-right text-purple-700">
                           {formatCurrency(
                             transporters.reduce(
