@@ -526,7 +526,7 @@ const DredgingDashboard: React.FC = () => {
 
   // Google Apps Script URL
   const APPS_SCRIPT_URL =
-    "https://script.google.com/macros/s/AKfycbwTimTnSOaCkAmPxNAAi3Yio12mr5pxYTywcQfx3lhDkZMzCuKm6omq2g_KxtOdYBws7w/exec";
+    "https://script.google.com/macros/s/AKfycbytcTFRquKWvg6ZnUf_HDbyNp0DOtA4cB7UWfOa577SKEMKkPi7nli_uslOpv3zUikV_g/exec";
 
   const submitToAppsScript = async (action: string, data: any, onSuccess: () => void, silent = false) => {
     const payload = { action, data };
