@@ -617,17 +617,23 @@ const DredgingDashboard: React.FC = () => {
 
   const saveTrip = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
+    
+    // Validate required fields
+    if (!tripForm.date || !tripForm.dredgerId || !tripForm.transporterId || !tripForm.truckId || !tripForm.trips) {
+      alert("Please fill in all required fields: Date, Dredger, Transporter, Truck, and Number of Trips.");
+      return;
+    }
+
     const allTrucks = transporters.flatMap((t) => t.trucks);
     const truck = allTrucks.find((tr) => tr.id === tripForm.truckId);
     const dredger = dredgers.find((d) => d.id === tripForm.dredgerId);
     const transporter = transporters.find((t) => t.id === tripForm.transporterId);
 
     const tripsCount = tripForm.trips || 0;
-    const capacity = truck?.capacityCbm || 0; // actual capacity
+    const capacity = truck?.capacityCbm || 0; 
     const dredgerRate = tripForm.dredgerRate ?? dredger?.ratePerCbm ?? 0;
     const transporterRate = tripForm.transporterRate ?? transporter?.ratePerCbm ?? 0;
 
-    // Default billing CBMs come from the selected truck (per-truck billing), else fall back to actual capacity
     const defaultTransporterBilling = truck?.transporterBillingCbm && truck.transporterBillingCbm > 0
       ? truck.transporterBillingCbm
       : capacity;
@@ -635,12 +641,10 @@ const DredgingDashboard: React.FC = () => {
       ? truck.dredgerBillingCbm
       : capacity;
 
-    // Optional transporter billing capacity override at trip level (e.g., 13 CBM billed instead of actual 12.8)
     const transporterBillingCbm = tripForm.transporterBillingCbm && tripForm.transporterBillingCbm > 0
       ? tripForm.transporterBillingCbm
       : defaultTransporterBilling;
 
-    // Dredger billing capacity uses dredgerBillingCbm (or capacity)
     const dredgerBillingCbm = defaultDredgerBilling;
 
     const dredgerAmount = tripForm.dredgerAmount ?? tripsCount * dredgerBillingCbm * dredgerRate;
@@ -665,6 +669,7 @@ const DredgingDashboard: React.FC = () => {
       notes: tripForm.notes || "",
     };
 
+    // Optimistic UI update
     if (editingItem) {
       setTrips((prev) => prev.map((t) => (t.id === editingItem.id ? newTrip : t)));
     } else {
@@ -673,7 +678,7 @@ const DredgingDashboard: React.FC = () => {
 
     const tripData = {
       actionType: editingItem ? "editTrip" : "saveTrip",
-      originalDate: editingItem ? editingItem.date : undefined,
+      originalDate: editingItem ? (editingItem.originalDate || editingItem.date) : undefined,
       originalDredgerCode: editingItem ? (dredgers.find(d => d.id === editingItem.dredgerId)?.code) : undefined,
       Date: tripForm.date,
       DredgerCode: dredger?.code || "",
@@ -694,7 +699,9 @@ const DredgingDashboard: React.FC = () => {
     setEditingItem(null);
     setTripForm({});
 
-    submitToAppsScript(tripData.actionType, tripData, () => {}, true);
+    submitToAppsScript(tripData.actionType, tripData, () => {
+      console.log(`Trip ${editingItem ? 'updated' : 'saved'} in sheet`);
+    }, false); // Set to false to force reload and confirm persistence
   };
 
   const savePayment = async (e?: React.FormEvent) => {
@@ -822,7 +829,10 @@ const DredgingDashboard: React.FC = () => {
 
   const handleAddTruckSubmit = async () => {
     const transporter = transporters.find((t) => t.id === truckForm.transporterId);
-    if (!transporter || !truckForm.plateNumber) return;
+    if (!transporter || !truckForm.plateNumber) {
+      alert("Please enter a plate number.");
+      return;
+    }
 
     const tBilling = Number(truckForm.transporterBillingCbm) || 0;
     const dBilling = Number(truckForm.dredgerBillingCbm) || 0;
@@ -864,13 +874,15 @@ const DredgingDashboard: React.FC = () => {
     );
 
     setShowAddTruckModal(false);
+    
+    // Explicitly call saveTransporter with new truck data
     submitToAppsScript(
       "saveTransporter",
       truckData,
       () => {
         console.log("Truck saved to sheet");
       },
-      true
+      false // Force reload to confirm
     );
   };
 
@@ -3080,20 +3092,20 @@ const DredgingDashboard: React.FC = () => {
       )}
 
       {showTripModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-lg">
-            <h3 className="text-xl font-bold mb-4">{editingItem ? "Edit" : "Add"} Trip Report</h3>
-            <div className="space-y-4">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg p-6 w-full max-w-lg max-h-[90vh] flex flex-col shadow-2xl">
+            <h3 className="text-xl font-bold mb-4 border-b pb-2">{editingItem ? "Edit" : "Add"} Trip Report</h3>
+            <div className="space-y-4 overflow-y-auto pr-2 flex-grow">
               <div>
                 <label className="block text-sm font-medium text-gray-700">Date</label>
                 <input
                   type="date"
                   value={tripForm.date || ""}
                   onChange={(e) => setTripForm({ ...tripForm, date: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg"
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
                 />
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Dredger</label>
                   <select
@@ -3230,7 +3242,7 @@ const DredgingDashboard: React.FC = () => {
                 />
               </div>
             </div>
-            <div className="flex justify-end space-x-2 mt-6">
+            <div className="flex justify-end space-x-2 mt-6 border-t pt-4 sticky bottom-0 bg-white">
               <button
                 type="button"
                 onClick={() => {
@@ -3238,16 +3250,16 @@ const DredgingDashboard: React.FC = () => {
                   setEditingItem(null);
                   setTripForm({});
                 }}
-                className="px-4 py-2 border rounded-lg hover:bg-gray-50"
+                className="px-4 py-2 border rounded-lg hover:bg-gray-50 transition-colors"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={() => saveTrip()}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 shadow-md transition-colors"
               >
-                Save
+                {editingItem ? "Update Trip" : "Save Trip"}
               </button>
             </div>
           </div>
@@ -3255,17 +3267,17 @@ const DredgingDashboard: React.FC = () => {
       )}
 
       {showAddTruckModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
-            <h3 className="text-xl font-bold mb-4">Add Truck</h3>
-            <div className="space-y-4">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md max-h-[90vh] flex flex-col shadow-2xl">
+            <h3 className="text-xl font-bold mb-4 border-b pb-2">Add Truck</h3>
+            <div className="space-y-4 overflow-y-auto pr-2 flex-grow">
               <div>
                 <label className="block text-sm font-medium text-gray-700">Truck Name</label>
                 <input
                   type="text"
                   value={truckForm.truckName || ""}
                   onChange={(e) => setTruckForm({ ...truckForm, truckName: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg"
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
                   placeholder="e.g., TP01"
                 />
               </div>
@@ -3275,11 +3287,11 @@ const DredgingDashboard: React.FC = () => {
                   type="text"
                   value={truckForm.plateNumber || ""}
                   onChange={(e) => setTruckForm({ ...truckForm, plateNumber: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg"
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
                   placeholder="ABC-123"
                 />
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Dredger CBM (actual)</label>
                   <input
@@ -3292,7 +3304,7 @@ const DredgingDashboard: React.FC = () => {
                         dredgerBillingCbm: e.target.value ? parseFloat(e.target.value) : undefined,
                       })
                     }
-                    className="w-full px-3 py-2 border rounded-lg"
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
                     placeholder="e.g., 12.8"
                   />
                 </div>
@@ -3308,7 +3320,7 @@ const DredgingDashboard: React.FC = () => {
                         transporterBillingCbm: e.target.value ? parseFloat(e.target.value) : undefined,
                       })
                     }
-                    className="w-full px-3 py-2 border rounded-lg"
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
                     placeholder="e.g., 13"
                   />
                 </div>
@@ -3318,28 +3330,28 @@ const DredgingDashboard: React.FC = () => {
                 <select
                   value={truckForm.status || "active"}
                   onChange={(e) => setTruckForm({ ...truckForm, status: e.target.value as "active" | "inactive" })}
-                  className="w-full px-3 py-2 border rounded-lg"
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="active">Active</option>
                   <option value="inactive">Inactive</option>
                 </select>
               </div>
             </div>
-            <div className="flex justify-end space-x-2 mt-6">
+            <div className="flex justify-end space-x-2 mt-6 border-t pt-4 sticky bottom-0 bg-white">
               <button
                 type="button"
                 onClick={() => {
                   setShowAddTruckModal(false);
                   setTruckForm({ transporterId: "" });
                 }}
-                className="px-4 py-2 border rounded-lg hover:bg-gray-50"
+                className="px-4 py-2 border rounded-lg hover:bg-gray-50 transition-colors"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={handleAddTruckSubmit}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 shadow-md transition-colors"
               >
                 Save Truck
               </button>
