@@ -270,7 +270,7 @@ const DredgingDashboard: React.FC = () => {
           id: (row[0] || i).toString() + "_" + i, // Unique ID fix
           code: row[0],
           name: row[1],
-          ratePerCbm: parseFloat(row[2]) || 0,
+          ratePerCbm: parseMoney(row[2]),
           status: (row[3] || "active").toLowerCase() as any,
           contractor: row[4],
           contractNumber: row[5],
@@ -301,7 +301,7 @@ const DredgingDashboard: React.FC = () => {
             id: code,
             code,
             name: row[1],
-            ratePerCbm: parseFloat(row[2]) || 0,
+            ratePerCbm: parseMoney(row[2]),
             status: (row[3] || "active").toLowerCase(),
             contractor: row[4],
             contractNumber: row[5],
@@ -407,7 +407,7 @@ const DredgingDashboard: React.FC = () => {
             date: row[0],
             entityType: (row[1] || "dredger").toLowerCase() as any,
             entityId: row[2],
-            amount: parseFloat(row[3]) || 0,
+            amount: parseMoney(row[3]),
             paymentMethod: row[4] || "Bank Transfer",
             reference: ref,
             notes: row[6] || "",
@@ -3408,3 +3408,4 @@ export function App() {
 }
 
 export default App;
+
