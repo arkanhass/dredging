@@ -1185,54 +1185,107 @@ const DredgingDashboard: React.FC = () => {
 
   // Export to Excel (CSV format)
   const exportTrucksReport = () => {
-    const allTrucks: any[] = [];
-    
+    // 1. Identify all unique trucks from BOTH the Transporters list AND the Trips list
+    // This ensures that even if a truck isn't in the Transporters/Trucks profile yet but exists in Trips, it's included.
+    const truckMap = new Map<string, any>();
+
+    // From Transporters/Trucks profile
     transporters.forEach(transporter => {
       transporter.trucks.forEach(truck => {
-        // Calculate total CBM transported by this truck from trips
-        const truckTrips = trips.filter(t => 
-          t.transporterId === transporter.id && 
-          (t.truckId === truck.id || t.plateNumber === truck.plateNumber)
-        );
-        
-        if (truckTrips.length === 0) return; // Only include trucks with activity
-
-        const totalTrips = truckTrips.reduce((sum, t) => sum + (t.trips || 0), 0);
-        const totalAmount = truckTrips.reduce((sum, t) => sum + (t.transporterAmount || 0), 0);
-        
-        // Calculate actual average billing CBMs and rates from the trips themselves
-        // Transporter billing volume: Sum of (Transporter Billing CBM * Trips)
-        const totalTransporterBillingVol = truckTrips.reduce((sum, t) => {
-          return sum + ((t.transporterBillingCbm || 0) * (t.trips || 0));
-        }, 0);
-        const avgTransporterBillingCbm = totalTrips > 0 ? totalTransporterBillingVol / totalTrips : 0;
-        
-        // Dredger billing volume: Sum of (Dredger Billing CBM * Trips)
-        const totalDredgerBillingVol = truckTrips.reduce((sum, t) => {
-          return sum + ((t.dredgerBillingCbm || 0) * (t.trips || 0));
-        }, 0);
-        const avgDredgerBillingCbm = totalTrips > 0 ? totalDredgerBillingVol / totalTrips : 0;
-
-        // Rate per CBM = Total Amount / Total Transporter Billing Volume
-        const avgRate = totalTransporterBillingVol > 0 ? totalAmount / totalTransporterBillingVol : (transporter.ratePerCbm || 0);
-        
-        allTrucks.push({
-          contractorName: transporter.contractor || 'Unassigned',
-          transporterName: transporter.name || '',
-          transporterCode: transporter.code || '',
-          truckName: truck.truckName || 'Unnamed',
-          plateNumber: truck.plateNumber || '',
-          transporterBillingCbm: avgTransporterBillingCbm,
-          dredgerBillingCbm: avgDredgerBillingCbm,
-          rateCbm: avgRate,
-          totalTrips: totalTrips,
-          totalBillingVolume: totalTransporterBillingVol,
-          totalAmount: totalAmount,
-        });
+        const key = truck.plateNumber.trim().toUpperCase();
+        if (!truckMap.has(key)) {
+          truckMap.set(key, {
+            truckName: truck.truckName || "Unnamed",
+            plateNumber: truck.plateNumber,
+            transporterName: transporter.name,
+            transporterCode: transporter.code,
+            contractorName: transporter.contractor || "Unassigned",
+            profileTBilling: truck.transporterBillingCbm,
+            profileDBilling: truck.dredgerBillingCbm,
+            fallbackRate: transporter.ratePerCbm || 0
+          });
+        }
       });
     });
 
-    // Sort hierarchy should be ONLY by Truck Name (Natural Sort)
+    // From Trips (captures any trucks not in profile, like Tipper 27-32 if missing from Transporters sheet)
+    trips.forEach(trip => {
+      const key = (trip.plateNumber || "").trim().toUpperCase();
+      if (!key) return;
+      if (!truckMap.has(key)) {
+        const transporter = transporters.find(tr => tr.id === trip.transporterId || tr.code === trip.transporterId);
+        truckMap.set(key, {
+          truckName: "Unnamed", 
+          plateNumber: trip.plateNumber,
+          transporterName: transporter?.name || "Unknown",
+          transporterCode: trip.transporterId,
+          contractorName: transporter?.contractor || "Unassigned",
+          profileTBilling: undefined,
+          profileDBilling: undefined,
+          fallbackRate: transporter?.ratePerCbm || 0
+        });
+      }
+    });
+
+    const allTrucks: any[] = [];
+    
+    truckMap.forEach((truckInfo, plateKey) => {
+      // Find all trips for this specific plate
+      const truckTrips = trips.filter(t => (t.plateNumber || "").trim().toUpperCase() === plateKey);
+      
+      if (truckTrips.length === 0) return;
+
+      const totalTrips = truckTrips.reduce((sum, t) => sum + (t.trips || 0), 0);
+      const totalAmount = truckTrips.reduce((sum, t) => sum + (t.transporterAmount || 0), 0);
+      
+      // Calculate weighted averages for billing CBMs, but ONLY if they are present
+      const tBillingSum = truckTrips.reduce((sum, t) => {
+        const val = Number.isFinite(t.transporterBillingCbm) && t.transporterBillingCbm > 0 
+          ? t.transporterBillingCbm 
+          : truckInfo.profileTBilling;
+        return sum + (Number(val || 0) * (t.trips || 0));
+      }, 0);
+      
+      const dBillingSum = truckTrips.reduce((sum, t) => {
+        const val = Number.isFinite(t.dredgerBillingCbm) && t.dredgerBillingCbm > 0 
+          ? t.dredgerBillingCbm 
+          : truckInfo.profileDBilling;
+        return sum + (Number(val || 0) * (t.trips || 0));
+      }, 0);
+
+      const avgTBilling = totalTrips > 0 ? tBillingSum / totalTrips : 0;
+      const avgDBilling = totalTrips > 0 ? dBillingSum / totalTrips : 0;
+
+      // Billing Volume is strictly from Transporter Billing CBM
+      const totalBillingVolume = tBillingSum;
+      const avgRate = totalBillingVolume > 0 ? totalAmount / totalBillingVolume : truckInfo.fallbackRate;
+      
+      // Determine actual name (prefer trip notes if Tipper X is there, or just truckName)
+      let finalName = truckInfo.truckName;
+      if (finalName === "Unnamed") {
+        const noteWithTipper = truckTrips.find(t => (t.notes || "").toLowerCase().includes("tipper"));
+        if (noteWithTipper) {
+          const match = noteWithTipper.notes.match(/Tipper\s*\d+/i);
+          if (match) finalName = match[0];
+        }
+      }
+
+      allTrucks.push({
+        truckName: finalName,
+        plateNumber: truckInfo.plateNumber,
+        contractorName: truckInfo.contractorName,
+        transporterName: truckInfo.transporterName,
+        transporterCode: truckInfo.transporterCode,
+        transporterBillingCbm: avgTBilling > 0 ? avgTBilling.toFixed(2) : "",
+        dredgerBillingCbm: avgDBilling > 0 ? avgDBilling.toFixed(2) : "",
+        rateCbm: avgRate,
+        totalTrips: totalTrips,
+        totalBillingVolume: totalBillingVolume,
+        totalAmount: totalAmount,
+      });
+    });
+
+    // Natural sort by Truck Name
     allTrucks.sort((a, b) => {
       return a.truckName.localeCompare(b.truckName, undefined, { numeric: true, sensitivity: 'base' });
     });
@@ -1240,7 +1293,7 @@ const DredgingDashboard: React.FC = () => {
     let csv = 'Truck Name,Plate Number,Contractor Name,Transporter Name,Transporter Code,Transporter Billing CBM,Dredger Billing CBM,Rate/CBM,Total Trips,Total Billing Volume (CBM),Total Amount\n';
     
     allTrucks.forEach(t => {
-      csv += `"${t.truckName}","${t.plateNumber}","${t.contractorName}","${t.transporterName}","${t.transporterCode}",${t.transporterBillingCbm.toFixed(2)},${t.dredgerBillingCbm.toFixed(2)},${t.rateCbm.toFixed(2)},${t.totalTrips},${t.totalBillingVolume.toFixed(2)},${t.totalAmount.toFixed(2)}\n`;
+      csv += `"${t.truckName}","${t.plateNumber}","${t.contractorName}","${t.transporterName}","${t.transporterCode}",${t.transporterBillingCbm},${t.dredgerBillingCbm},${t.rateCbm.toFixed(2)},${t.totalTrips},${t.totalBillingVolume.toFixed(2)},${t.totalAmount.toFixed(2)}\n`;
     });
 
     // Add totals row
