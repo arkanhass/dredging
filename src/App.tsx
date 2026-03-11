@@ -352,9 +352,15 @@ const DredgingDashboard: React.FC = () => {
           const transporterAmount = parseMoney(row[10]);
 
           // FOR INTERNAL LOGIC ONLY: 
-          // Use Dredger Override > Dredger Profile > Transporter Override > Transporter Profile > 0
-          const effTBilling = tBillingRaw !== null ? tBillingRaw : (truck?.transporterBillingCbm || 0);
-          const effDBilling = dBillingRaw !== null ? dBillingRaw : (truck?.dredgerBillingCbm || effTBilling || 0);
+          // Transporter Volume: Override > Profile > Truck Capacity > 0
+          const effTBilling = tBillingRaw !== null 
+            ? tBillingRaw 
+            : (truck?.transporterBillingCbm || truck?.capacityCbm || 0);
+          
+          // Dredger Volume: Override > Profile > Truck Capacity > Transporter Volume > 0
+          const effDBilling = dBillingRaw !== null 
+            ? dBillingRaw 
+            : (truck?.dredgerBillingCbm || truck?.capacityCbm || effTBilling || 0);
 
           const totalVolume = tripsCount * effDBilling;
           const billedTransporterAmount = transporterAmount !== null
@@ -643,12 +649,12 @@ const DredgingDashboard: React.FC = () => {
     const dredgerRate = tripForm.dredgerRate ?? dredger?.ratePerCbm ?? 0;
     const transporterRate = tripForm.transporterRate ?? transporter?.ratePerCbm ?? 0;
 
-    // FOR INTERNAL CALCULATION ONLY
-    const internalTBilling = tripForm.transporterBillingCbm || truck?.transporterBillingCbm || truck?.capacityCbm || 0;
-    const internalDBilling = tripForm.dredgerBillingCbm || truck?.dredgerBillingCbm || internalTBilling;
+    // Use truck profile billing CBMs strictly for internal calculations
+    const tBillingProfile = truck?.transporterBillingCbm || truck?.capacityCbm || 0;
+    const dBillingProfile = truck?.dredgerBillingCbm || truck?.capacityCbm || tBillingProfile;
 
-    const dredgerAmount = tripForm.dredgerAmount ?? tripsCount * internalDBilling * dredgerRate;
-    const transporterAmount = tripForm.transporterAmount ?? tripsCount * internalTBilling * transporterRate;
+    const dredgerAmount = tripForm.dredgerAmount ?? (tripsCount * dBillingProfile * dredgerRate);
+    const transporterAmount = tripForm.transporterAmount ?? (tripsCount * tBillingProfile * transporterRate);
 
     const newTrip: Trip = {
       id: editingItem ? editingItem.id : `temp-${Date.now()}`,
@@ -658,14 +664,14 @@ const DredgingDashboard: React.FC = () => {
       truckId: tripForm.truckId || "",
       plateNumber: truck?.plateNumber || "",
       trips: tripsCount,
-      capacityCbm: internalDBilling,
-      totalVolume: tripsCount * internalDBilling,
+      capacityCbm: dBillingProfile, // We use dredger capacity for total volume
+      totalVolume: tripsCount * dBillingProfile,
       dredgerRate,
       transporterRate,
       dredgerAmount,
       transporterAmount,
-      transporterBillingCbm: tripForm.transporterBillingCbm || undefined,
-      dredgerBillingCbm: tripForm.dredgerBillingCbm || undefined,
+      transporterBillingCbm: undefined, 
+      dredgerBillingCbm: undefined, 
       dumpingLocation: tripForm.dumpingLocation || "",
       notes: tripForm.notes || "",
     };
@@ -717,8 +723,8 @@ const DredgingDashboard: React.FC = () => {
         Notes: newTrip.notes || "",
         DredgerAmount: dredgerAmount,
         TransporterAmount: transporterAmount,
-        TransporterBillingCbm: tripForm.transporterBillingCbm || "", // Send blank if not explicitly set
-        DredgerBillingCbm: tripForm.dredgerBillingCbm || "", // Send blank if not explicitly set
+        TransporterBillingCbm: "", // No overrides from form anymore
+        DredgerBillingCbm: "", // No overrides from form anymore
       };
 
       submitToAppsScript("saveTrip", tripData, () => {
@@ -3261,17 +3267,9 @@ const DredgingDashboard: React.FC = () => {
                 <select
                   value={tripForm.truckId || ""}
                   onChange={(e) => {
-                    const selectedTruck = transporters
-                      .find((t) => t.id === tripForm.transporterId)
-                      ?.trucks.find((tr) => tr.id === e.target.value);
                     setTripForm({
                       ...tripForm,
                       truckId: e.target.value,
-                      // Default transporter billing CBM to this truck's capacity if not already set
-                      transporterBillingCbm:
-                        tripForm.transporterBillingCbm !== undefined
-                          ? tripForm.transporterBillingCbm
-                          : selectedTruck?.capacityCbm,
                     });
                   }}
                   className="w-full px-3 py-2 border rounded-lg"
@@ -3297,42 +3295,6 @@ const DredgingDashboard: React.FC = () => {
                   className="w-full px-3 py-2 border rounded-lg"
                   placeholder="0"
                 />
-              </div>
-              {tripForm.truckId && (
-                <div className="bg-blue-50 p-3 rounded space-y-1">
-                  <p className="text-sm text-blue-800">
-                    <strong>Dredger Volume (actual capacity):</strong> {" "}
-                    {(tripForm.trips || 0) *
-                      (transporters.flatMap((t) => t.trucks).find((tr) => tr.id === tripForm.truckId)?.capacityCbm || 0)}
-                    {" "}
-                    CBM
-                  </p>
-                  <p className="text-sm text-purple-800">
-                    <strong>Transporter Billed Volume:</strong> {" "}
-                    {(tripForm.trips || 0) *
-                      (tripForm.transporterBillingCbm ||
-                        transporters.flatMap((t) => t.trucks).find((tr) => tr.id === tripForm.truckId)?.capacityCbm ||
-                        0)}
-                    {" "}
-                    CBM
-                  </p>
-                </div>
-              )}
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Transporter Billing Capacity (CBM)</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={tripForm.transporterBillingCbm ?? ""}
-                  onChange={(e) =>
-                    setTripForm({ ...tripForm, transporterBillingCbm: e.target.value ? parseFloat(e.target.value) : undefined })
-                  }
-                  className="w-full px-3 py-2 border rounded-lg"
-                  placeholder="Leave blank to use truck capacity"
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Use this if transporter billing CBM differs from actual capacity (e.g., 12.8 actual but bill 13).
-                </p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">Dumping Location</label>
