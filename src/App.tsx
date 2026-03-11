@@ -44,6 +44,7 @@ interface TruckRecord {
   truckName?: string;
   transporterBillingCbm?: number;
   dredgerBillingCbm?: number;
+  ratePerCbm?: number;
 }
 
 interface Transporter {
@@ -319,6 +320,7 @@ const DredgingDashboard: React.FC = () => {
             status: "active",
             transporterBillingCbm: tBilling, // EXACT value or null
             dredgerBillingCbm: dBilling, // EXACT value or null
+            ratePerCbm: parseMoney(row[2]) || 0, // Individual truck rate
           });
         }
       });
@@ -347,7 +349,7 @@ const DredgingDashboard: React.FC = () => {
 
           const tripsCount = parseInt(row[4]) || 0;
           const dredgerRate = parseMoney(row[5]) || 0;
-          const transporterRate = parseMoney(row[6]) || 0;
+          const transporterRate = parseMoney(row[6]) || truck?.ratePerCbm || transporter?.ratePerCbm || 0;
           const dredgerAmount = parseMoney(row[9]);
           const transporterAmount = parseMoney(row[10]);
 
@@ -647,7 +649,7 @@ const DredgingDashboard: React.FC = () => {
 
     const tripsCount = tripForm.trips || 0;
     const dredgerRate = tripForm.dredgerRate ?? dredger?.ratePerCbm ?? 0;
-    const transporterRate = tripForm.transporterRate ?? transporter?.ratePerCbm ?? 0;
+    const transporterRate = tripForm.transporterRate ?? truck?.ratePerCbm ?? transporter?.ratePerCbm ?? 0;
 
     // Use truck profile billing CBMs strictly for internal calculations
     const tBillingProfile = truck?.transporterBillingCbm || truck?.capacityCbm || 0;
