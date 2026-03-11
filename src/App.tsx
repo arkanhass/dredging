@@ -703,66 +703,33 @@ const DredgingDashboard: React.FC = () => {
       setTrips((prev) => [...prev, newTrip]);
     }
 
-    // Now handle the server-side update in the background
-    (async () => {
-      if (oldItem) {
-        const oldDredger = dredgers.find(d => d.id === oldItem.dredgerId);
-        const deleteData = {
-          // Send row identification in every possible format to ensure matching
-          Row: oldItem.rowNumber,
-          row: oldItem.rowNumber,
-          rowNumber: oldItem.rowNumber,
-          SheetRow: oldItem.rowNumber,
-          rowIndex: (oldItem.rowNumber || 0) - 1,
-          index: (oldItem.rowNumber || 0) - 1,
-          
-          // Reference identifiers
-          Reference: oldItem.reference,
-          reference: oldItem.reference,
-          
-          // Original content fallbacks
-          date: oldItem.date,
-          plateNumber: oldItem.plateNumber,
-          dredgerCode: oldDredger?.code || ""
-        };
-        
-        console.log(`Attempting to delete old trip at Sheet Row: ${oldItem.rowNumber}`, deleteData);
-        
-        try {
-          await fetch(APPS_SCRIPT_URL, {
-            method: "POST",
-            mode: "no-cors",
-            headers: { "Content-Type": "text/plain" },
-            body: JSON.stringify({ action: "deleteTrip", data: deleteData }),
-          });
-          // Wait longer for the sheet to finish deleting the row before appending a new one
-          await new Promise(resolve => setTimeout(resolve, 3500));
-        } catch (err) {
-          console.error("Error deleting old trip:", err);
-        }
-      }
+    // Prepare the data payload
+    const tripData = {
+      Date: newTrip.date,
+      DredgerCode: dredger?.code || "",
+      TransporterCode: transporter?.code || "",
+      PlateNumber: truck?.plateNumber || "",
+      Trips: tripsCount,
+      DredgerRate: dredgerRate,
+      TransporterRate: transporterRate,
+      DumpingLocation: newTrip.dumpingLocation || "",
+      Notes: newTrip.notes || "",
+      DredgerAmount: dredgerAmount,
+      TransporterAmount: transporterAmount,
+      TransporterBillingCbm: "", 
+      DredgerBillingCbm: "", 
+      Reference: newTrip.reference,
+      // If editing, include the row number to be replaced
+      rowNumber: oldItem?.rowNumber,
+      Row: oldItem?.rowNumber
+    };
 
-      const tripData = {
-        Date: newTrip.date,
-        DredgerCode: dredger?.code || "",
-        TransporterCode: transporter?.code || "",
-        PlateNumber: truck?.plateNumber || "",
-        Trips: tripsCount,
-        DredgerRate: dredgerRate,
-        TransporterRate: transporterRate,
-        DumpingLocation: newTrip.dumpingLocation || "",
-        Notes: newTrip.notes || "",
-        DredgerAmount: dredgerAmount,
-        TransporterAmount: transporterAmount,
-        TransporterBillingCbm: "", // No overrides from form anymore
-        DredgerBillingCbm: "", // No overrides from form anymore
-        Reference: newTrip.reference, // Include the unique reference
-      };
+    // Use 'updateTrip' for edits, 'saveTrip' for new entries
+    const action = oldItem ? "updateTrip" : "saveTrip";
 
-      submitToAppsScript("saveTrip", tripData, () => {
-        console.log(`Trip saved/updated in sheet`);
-      }, false);
-    })();
+    submitToAppsScript(action, tripData, () => {
+      console.log(`Trip ${oldItem ? 'updated' : 'saved'} in sheet`);
+    }, false);
   };
 
   const savePayment = async (e?: React.FormEvent) => {
