@@ -697,7 +697,8 @@ const DredgingDashboard: React.FC = () => {
         const oldDredger = dredgers.find(d => d.id === oldItem.dredgerId);
         const deleteData = {
           date: oldItem.date,
-          dredgerCode: oldDredger?.code || ""
+          dredgerCode: oldDredger?.code || "",
+          plateNumber: oldItem.plateNumber // ADDED: Plate number as part of the primary key
         };
         
         try {
@@ -836,6 +837,7 @@ const DredgingDashboard: React.FC = () => {
       actionData = {
         date: trip?.date,
         dredgerCode: dredgers.find((d) => d.id === trip?.dredgerId)?.code,
+        plateNumber: trip?.plateNumber // ADDED: Plate number as part of the primary key
       };
     } else if (type === "payment") {
       const payment = payments.find((p) => p.id === id);
