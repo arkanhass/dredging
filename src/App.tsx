@@ -80,6 +80,7 @@ interface Trip {
   dumpingLocation: string;
   notes: string;
   reference: string; // Added: Unique identifier for each trip row
+  rowNumber?: number; // Added: Direct row number in Google Sheets
 }
 
 interface Payment {
@@ -377,6 +378,8 @@ const DredgingDashboard: React.FC = () => {
           // Reference for unique row identification (Column M, index 12)
           const ref = (row[12] || `trip-ref-${i}-${Date.now()}`).toString().trim();
 
+          const rowNumber = i + 2; // +1 for slice(1), +1 for 1-based index
+
           return {
             id: `trip-${i}`,
             date: rawDate,
@@ -396,6 +399,7 @@ const DredgingDashboard: React.FC = () => {
             dumpingLocation: row[7],
             notes: row[8] || "",
             reference: ref,
+            rowNumber,
           } satisfies Trip;
         })
       );
@@ -702,8 +706,13 @@ const DredgingDashboard: React.FC = () => {
     // Now handle the server-side update in the background
     (async () => {
       if (oldItem) {
+        const oldDredger = dredgers.find(d => d.id === oldItem.dredgerId);
         const deleteData = {
-          reference: oldItem.reference // Using the unique reference to identify and delete
+          rowNumber: oldItem.rowNumber, // PRIMARY KEY: The exact row number from Sheets
+          reference: oldItem.reference,
+          date: oldItem.date,
+          dredgerCode: oldDredger?.code || "",
+          plateNumber: oldItem.plateNumber
         };
         
         try {
@@ -841,7 +850,11 @@ const DredgingDashboard: React.FC = () => {
       setTrips((prev) => prev.filter((t) => t.id !== id));
       actionName = "deleteTrip";
       actionData = {
-        reference: trip?.reference
+        rowNumber: trip?.rowNumber,
+        reference: trip?.reference,
+        date: trip?.date,
+        dredgerCode: dredgers.find((d) => d.id === trip?.dredgerId)?.code,
+        plateNumber: trip?.plateNumber
       };
     } else if (type === "payment") {
       const payment = payments.find((p) => p.id === id);
