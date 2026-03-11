@@ -708,15 +708,25 @@ const DredgingDashboard: React.FC = () => {
       if (oldItem) {
         const oldDredger = dredgers.find(d => d.id === oldItem.dredgerId);
         const deleteData = {
-          // Send row identification in multiple common formats to be safe
+          // Send row identification in every possible format to ensure matching
           Row: oldItem.rowNumber,
           row: oldItem.rowNumber,
           rowNumber: oldItem.rowNumber,
-          // Send original data as a fallback for finding the row
+          SheetRow: oldItem.rowNumber,
+          rowIndex: (oldItem.rowNumber || 0) - 1,
+          index: (oldItem.rowNumber || 0) - 1,
+          
+          // Reference identifiers
+          Reference: oldItem.reference,
+          reference: oldItem.reference,
+          
+          // Original content fallbacks
           date: oldItem.date,
           plateNumber: oldItem.plateNumber,
           dredgerCode: oldDredger?.code || ""
         };
+        
+        console.log(`Attempting to delete old trip at Sheet Row: ${oldItem.rowNumber}`, deleteData);
         
         try {
           await fetch(APPS_SCRIPT_URL, {
@@ -726,7 +736,7 @@ const DredgingDashboard: React.FC = () => {
             body: JSON.stringify({ action: "deleteTrip", data: deleteData }),
           });
           // Wait longer for the sheet to finish deleting the row before appending a new one
-          await new Promise(resolve => setTimeout(resolve, 3000));
+          await new Promise(resolve => setTimeout(resolve, 3500));
         } catch (err) {
           console.error("Error deleting old trip:", err);
         }
@@ -854,15 +864,25 @@ const DredgingDashboard: React.FC = () => {
       setTrips((prev) => prev.filter((t) => t.id !== id));
       actionName = "deleteTrip";
       actionData = {
-        // Send row identification in multiple common formats to be safe
+        // Send row identification in every possible format to ensure matching
         Row: trip?.rowNumber,
         row: trip?.rowNumber,
         rowNumber: trip?.rowNumber,
-        // Send original data as a fallback for finding the row
+        SheetRow: trip?.rowNumber,
+        rowIndex: (trip?.rowNumber || 0) - 1,
+        index: (trip?.rowNumber || 0) - 1,
+        
+        // Reference identifiers
+        Reference: trip?.reference,
+        reference: trip?.reference,
+        
+        // Original content fallbacks
         date: trip?.date,
         plateNumber: trip?.plateNumber,
         dredgerCode: dredgers.find((d) => d.id === trip?.dredgerId)?.code || ""
       };
+      
+      console.log(`Directly deleting trip at Sheet Row: ${trip?.rowNumber}`, actionData);
     } else if (type === "payment") {
       const payment = payments.find((p) => p.id === id);
       setPayments((prev) => prev.filter((p) => p.id !== id));
