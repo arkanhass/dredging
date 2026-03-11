@@ -353,14 +353,14 @@ const DredgingDashboard: React.FC = () => {
 
           // FOR INTERNAL LOGIC ONLY: 
           // Transporter Volume: Override > Profile > Truck Capacity > 0
-          const effTBilling = tBillingRaw !== null 
+          const effTBilling = tBillingRaw !== null && tBillingRaw > 0
             ? tBillingRaw 
             : (truck?.transporterBillingCbm || truck?.capacityCbm || 0);
           
-          // Dredger Volume: Override > Profile > Truck Capacity > Transporter Volume > 0
-          const effDBilling = dBillingRaw !== null 
+          // Dredger Volume: Override > Profile > Transporter Volume (fallback)
+          const effDBilling = dBillingRaw !== null && dBillingRaw > 0
             ? dBillingRaw 
-            : (truck?.dredgerBillingCbm || truck?.capacityCbm || effTBilling || 0);
+            : (truck?.dredgerBillingCbm || effTBilling);
 
           const totalVolume = tripsCount * effDBilling;
           const billedTransporterAmount = transporterAmount !== null
@@ -651,7 +651,7 @@ const DredgingDashboard: React.FC = () => {
 
     // Use truck profile billing CBMs strictly for internal calculations
     const tBillingProfile = truck?.transporterBillingCbm || truck?.capacityCbm || 0;
-    const dBillingProfile = truck?.dredgerBillingCbm || truck?.capacityCbm || tBillingProfile;
+    const dBillingProfile = truck?.dredgerBillingCbm || tBillingProfile;
 
     const dredgerAmount = tripForm.dredgerAmount ?? (tripsCount * dBillingProfile * dredgerRate);
     const transporterAmount = tripForm.transporterAmount ?? (tripsCount * tBillingProfile * transporterRate);
