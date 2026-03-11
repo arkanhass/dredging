@@ -3286,7 +3286,19 @@ const DredgingDashboard: React.FC = () => {
       {showTripModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg p-6 w-full max-w-lg max-h-[90vh] flex flex-col shadow-2xl">
-            <h3 className="text-xl font-bold mb-4 border-b pb-2">{editingItem ? "Edit" : "Add"} Trip Report</h3>
+            <div className="flex justify-between items-center mb-4 border-b pb-2">
+              <h3 className="text-xl font-bold">{editingItem ? "Edit" : "Add"} Trip Report</h3>
+              {editingItem && (editingItem as Trip).rowNumber && (
+                 <div className="flex flex-col items-end">
+                   <span className="text-[10px] text-gray-400 font-mono">
+                     Ref: {(editingItem as Trip).reference}
+                   </span>
+                   <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded font-mono">
+                     Sheet Row: {(editingItem as Trip).rowNumber}
+                   </span>
+                 </div>
+               )}
+            </div>
             <div className="space-y-4 overflow-y-auto pr-2 flex-grow">
               <div>
                 <label className="block text-sm font-medium text-gray-700">Date</label>
