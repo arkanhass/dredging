@@ -191,6 +191,7 @@ const DredgingDashboard: React.FC = () => {
   const reportOverallRef = useRef<HTMLDivElement>(null);
   const reportDredgerRef = useRef<HTMLDivElement>(null);
   const reportTransporterRef = useRef<HTMLDivElement>(null);
+  const reportAccountingRef = useRef<HTMLDivElement>(null);
   const reportTransporterReportRef = useRef<HTMLDivElement>(null);
 
   // PDF export state (used to hide borders/controls during capture)
@@ -1620,6 +1621,7 @@ const DredgingDashboard: React.FC = () => {
         { ref: reportOverallRef },
         { ref: reportDredgerRef },
         { ref: reportTransporterRef },
+        { ref: reportAccountingRef },
         { ref: reportTransporterReportRef },
       ];
 
