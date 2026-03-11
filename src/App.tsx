@@ -1478,15 +1478,99 @@ const DredgingDashboard: React.FC = () => {
       return bIso.localeCompare(aIso);
     });
 
+  const downloadTransporterReportExcel = () => {
+    try {
+      const exportData: any[] = [];
+      
+      transporterReportRows.forEach(group => {
+        // Add Group Header Row
+        exportData.push({
+          "Date / Group": group.key,
+          "Dredger": "",
+          "Transporter": "",
+          "Truck": "",
+          "Trips": group.totalTrips,
+          "Volume (CBM)": group.totalVolume,
+          "Amount": group.totalAmount
+        });
+
+        // Add Data Rows
+        group.rows.forEach(row => {
+          const dredger = dredgers.find(d => d.id === row.dredgerId);
+          const transporter = transporters.find(t => t.id === row.transporterId);
+          const truck = transporter?.trucks.find(tr => tr.id === row.truckId || tr.plateNumber === row.plateNumber);
+          const capacityCbm = row.capacityCbm ?? truck?.capacityCbm ?? 0;
+          const totalVolume = row.totalVolume ?? (capacityCbm * (row.trips ?? 0));
+          
+          exportData.push({
+            "Date / Group": row.date,
+            "Dredger": dredger?.name || "",
+            "Transporter": transporter?.name || "",
+            "Truck": truck ? `${truck.truckName || ""} (${truck.plateNumber})` : row.plateNumber,
+            "Trips": row.trips,
+            "Volume (CBM)": totalVolume,
+            "Amount": row.transporterAmount || 0
+          });
+        });
+
+        // Empty row for separation
+        exportData.push({});
+      });
+
+      const ws = XLSX.utils.json_to_sheet(exportData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Transporter Report");
+      XLSX.writeFile(wb, `transporter_report_${new Date().toISOString().split("T")[0]}.xlsx`);
+    } catch (err) {
+      console.error("Excel generation error:", err);
+    }
+  };
+
   const downloadTransporterReportPdf = async () => {
     setIsExportingPdf(true);
     try {
       const pdf = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
-      const node = reportTransporterReportRef.current;
-      if (node) {
-        await renderNodeToPdf(node, pdf);
-        pdf.save(`transporter_report_${new Date().toISOString().split("T")[0]}.pdf`);
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const margin = 30;
+
+      // Instead of one big screenshot, we'll loop through each group to handle page breaks
+      const container = reportTransporterReportRef.current;
+      if (!container) return;
+
+      const groups = container.querySelectorAll('.page-break-inside-avoid');
+      let first = true;
+
+      for (let i = 0; i < groups.length; i++) {
+        const groupNode = groups[i] as HTMLElement;
+        const canvas = await html2canvas(groupNode, {
+          scale: 2,
+          useCORS: true,
+          backgroundColor: "#ffffff",
+        });
+
+        const imgData = canvas.toDataURL("image/png");
+        const drawWidth = pageWidth - (margin * 2);
+        const drawHeight = (canvas.height * drawWidth) / canvas.width;
+
+        // If this group is too tall for a single page, it will be scaled to fit that page.
+        // But since we are processing groups individually, it won't squash the whole report.
+        if (!first) pdf.addPage();
+        
+        let finalDrawHeight = drawHeight;
+        let finalDrawWidth = drawWidth;
+        
+        if (finalDrawHeight > (pageHeight - margin * 2)) {
+          finalDrawHeight = pageHeight - margin * 2;
+          finalDrawWidth = (canvas.width * finalDrawHeight) / canvas.height;
+        }
+
+        const x = (pageWidth - finalDrawWidth) / 2;
+        pdf.addImage(imgData, "PNG", x, margin, finalDrawWidth, finalDrawHeight);
+        first = false;
       }
+
+      pdf.save(`transporter_report_${new Date().toISOString().split("T")[0]}.pdf`);
     } catch (err) {
       console.error("PDF generation error:", err);
     } finally {
@@ -2609,10 +2693,17 @@ const DredgingDashboard: React.FC = () => {
               <div className="flex flex-wrap gap-2 items-center">
                 <button
                   onClick={downloadTransporterReportPdf}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2 mr-4"
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2"
                 >
                   <Download className="w-5 h-5" />
-                  <span>Download PDF</span>
+                  <span>PDF</span>
+                </button>
+                <button
+                  onClick={downloadTransporterReportExcel}
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center space-x-2 mr-4"
+                >
+                  <FileSpreadsheet className="w-5 h-5" />
+                  <span>Excel</span>
                 </button>
                 <input
                   type="date"
