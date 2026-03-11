@@ -188,7 +188,7 @@ const DredgingDashboard: React.FC = () => {
   const reportOverallRef = useRef<HTMLDivElement>(null);
   const reportDredgerRef = useRef<HTMLDivElement>(null);
   const reportTransporterRef = useRef<HTMLDivElement>(null);
-  const reportAccountingRef = useRef<HTMLDivElement>(null);
+  const reportTransporterReportRef = useRef<HTMLDivElement>(null);
 
   // PDF export state (used to hide borders/controls during capture)
   const [isExportingPdf, setIsExportingPdf] = useState(false);
@@ -1406,9 +1406,19 @@ const DredgingDashboard: React.FC = () => {
     });
 
     const result = Array.from(groups.values()).map((g) => {
+      // Sort rows by truck name within each group
+      const sortedRows = [...g.rows].sort((a, b) => {
+        const truckA = transporters.flatMap((tr) => tr.trucks).find((tr) => tr.id === a.truckId || tr.plateNumber === a.plateNumber);
+        const truckB = transporters.flatMap((tr) => tr.trucks).find((tr) => tr.id === b.truckId || tr.plateNumber === b.plateNumber);
+        const nameA = (truckA?.truckName || "").trim();
+        const nameB = (truckB?.truckName || "").trim();
+        return nameA.localeCompare(nameB, undefined, { numeric: true, sensitivity: 'base' });
+      });
+
       const totalTrips = g.rows.reduce((s, r) => s + (r.trips || 0), 0);
       const totalVolume = g.rows.reduce((s, r) => s + (r.totalVolume || 0), 0);
-      return { key: g.key, rows: g.rows, totalTrips, totalVolume };
+      const totalAmount = g.rows.reduce((s, r) => s + (r.transporterAmount || 0), 0);
+      return { key: g.key, rows: sortedRows, totalTrips, totalVolume, totalAmount };
     });
 
     // Sort groups by key for determinism (dates newest first if date)
@@ -1453,6 +1463,22 @@ const DredgingDashboard: React.FC = () => {
       return bIso.localeCompare(aIso);
     });
 
+  const downloadTransporterReportPdf = async () => {
+    setIsExportingPdf(true);
+    try {
+      const pdf = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
+      const node = reportTransporterReportRef.current;
+      if (node) {
+        await renderNodeToPdf(node, pdf);
+        pdf.save(`transporter_report_${new Date().toISOString().split("T")[0]}.pdf`);
+      }
+    } catch (err) {
+      console.error("PDF generation error:", err);
+    } finally {
+      setIsExportingPdf(false);
+    }
+  };
+
   const formatCurrency = (amount: number) => `₦${amount.toLocaleString()}`;
 
   // Helper: render a node to PDF (landscape, A4), respecting natural height across pages
@@ -1495,7 +1521,7 @@ const DredgingDashboard: React.FC = () => {
         { ref: reportOverallRef },
         { ref: reportDredgerRef },
         { ref: reportTransporterRef },
-        { ref: reportAccountingRef },
+        { ref: reportTransporterReportRef },
       ];
 
       let first = true;
@@ -2563,9 +2589,16 @@ const DredgingDashboard: React.FC = () => {
         {/* Transporter Report Tab */}
         {activeTab === "transporterReport" && (
           <div className="space-y-4">
-            <div className="flex justify-between items-center flex-wrap gap-3">
+            <div className="flex justify-between items-center flex-wrap gap-3 print:hidden">
               <h2 className="text-2xl font-bold">Transporter Report</h2>
               <div className="flex flex-wrap gap-2 items-center">
+                <button
+                  onClick={downloadTransporterReportPdf}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2 mr-4"
+                >
+                  <Download className="w-5 h-5" />
+                  <span>Download PDF</span>
+                </button>
                 <input
                   type="date"
                   value={trReportFilter.start}
@@ -2638,22 +2671,27 @@ const DredgingDashboard: React.FC = () => {
               </div>
             </div>
 
-            <div className="bg-white rounded-lg shadow">
+            <div className={`bg-white rounded-lg shadow ${isExportingPdf ? "border-0" : ""}`} ref={reportTransporterReportRef}>
               <div className="p-4 border-b flex justify-between items-center">
                 <h3 className="font-bold text-lg">Grouped Results</h3>
                 <div className="text-sm text-gray-500">Grouping by {trReportFilter.groupBy}</div>
               </div>
               <div className="divide-y">
                 {transporterReportRows.map((group) => (
-                  <div key={group.key} className="p-4">
+                  <div key={group.key} className="p-4 page-break-inside-avoid">
                     <div className="flex justify-between items-center mb-3">
-                      <h4 className="font-semibold text-lg">{group.key || "(Unspecified)"}</h4>
+                      <h4 className={`font-bold text-lg ${trReportFilter.groupBy === "date" ? "text-red-600" : ""}`}>
+                        {trReportFilter.groupBy === "date" ? formatDisplayDate(group.key) : group.key || "(Unspecified)"}
+                      </h4>
                       <div className="text-sm text-gray-600 space-x-3">
                         <span>
                           Trips: <strong>{group.totalTrips.toLocaleString()}</strong>
                         </span>
                         <span>
                           Total CBM: <strong>{group.totalVolume.toLocaleString()}</strong>
+                        </span>
+                        <span>
+                          Total Amount: <strong>{formatCurrency(group.totalAmount)}</strong>
                         </span>
                       </div>
                     </div>
@@ -2667,6 +2705,7 @@ const DredgingDashboard: React.FC = () => {
                             <th className="px-3 py-2 text-left">Truck</th>
                             <th className="px-3 py-2 text-right">Trips</th>
                             <th className="px-3 py-2 text-right">Volume (CBM)</th>
+                            <th className="px-3 py-2 text-right">Amount</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -2676,6 +2715,7 @@ const DredgingDashboard: React.FC = () => {
                             const truck = transporter?.trucks.find((tr) => tr.id === row.truckId || tr.plateNumber === row.plateNumber);
                             const capacityCbm = row.capacityCbm ?? truck?.capacityCbm ?? 0;
                             const totalVolume = row.totalVolume ?? capacityCbm * (row.trips ?? 0);
+                            const rowAmount = row.transporterAmount ?? 0;
                             return (
                               <tr key={row.id} className="border-t">
                                 <td className="px-3 py-2">{formatDisplayDate(row.date)}</td>
@@ -2686,6 +2726,7 @@ const DredgingDashboard: React.FC = () => {
                                 </td>
                                 <td className="px-3 py-2 text-right">{row.trips}</td>
                                 <td className="px-3 py-2 text-right">{totalVolume.toLocaleString()}</td>
+                                <td className="px-3 py-2 text-right font-medium">{formatCurrency(rowAmount)}</td>
                               </tr>
                             );
                           })}
@@ -2697,6 +2738,7 @@ const DredgingDashboard: React.FC = () => {
                             </td>
                             <td className="px-3 py-2 text-right">{group.totalTrips.toLocaleString()}</td>
                             <td className="px-3 py-2 text-right">{group.totalVolume.toLocaleString()}</td>
+                            <td className="px-3 py-2 text-right text-blue-700">{formatCurrency(group.totalAmount)}</td>
                           </tr>
                         </tfoot>
                       </table>
@@ -3209,6 +3251,16 @@ const DredgingDashboard: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Modal Backdrop Styles */}
+      <style>{`
+        @media print {
+          @page { size: landscape; margin: 10mm; }
+          body { -webkit-print-color-adjust: exact; }
+          .print-hidden { display: none !important; }
+          .page-break-inside-avoid { page-break-inside: avoid; break-inside: avoid; }
+        }
+      `}</style>
 
       {showTripModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
