@@ -706,8 +706,16 @@ const DredgingDashboard: React.FC = () => {
     // Now handle the server-side update in the background
     (async () => {
       if (oldItem) {
+        const oldDredger = dredgers.find(d => d.id === oldItem.dredgerId);
         const deleteData = {
-          rowNumber: oldItem.rowNumber, // USE ONLY ROW NUMBER
+          // Send row identification in multiple common formats to be safe
+          Row: oldItem.rowNumber,
+          row: oldItem.rowNumber,
+          rowNumber: oldItem.rowNumber,
+          // Send original data as a fallback for finding the row
+          date: oldItem.date,
+          plateNumber: oldItem.plateNumber,
+          dredgerCode: oldDredger?.code || ""
         };
         
         try {
@@ -717,7 +725,8 @@ const DredgingDashboard: React.FC = () => {
             headers: { "Content-Type": "text/plain" },
             body: JSON.stringify({ action: "deleteTrip", data: deleteData }),
           });
-          await new Promise(resolve => setTimeout(resolve, 1500));
+          // Wait longer for the sheet to finish deleting the row before appending a new one
+          await new Promise(resolve => setTimeout(resolve, 3000));
         } catch (err) {
           console.error("Error deleting old trip:", err);
         }
@@ -845,7 +854,14 @@ const DredgingDashboard: React.FC = () => {
       setTrips((prev) => prev.filter((t) => t.id !== id));
       actionName = "deleteTrip";
       actionData = {
-        rowNumber: trip?.rowNumber // USE ONLY ROW NUMBER
+        // Send row identification in multiple common formats to be safe
+        Row: trip?.rowNumber,
+        row: trip?.rowNumber,
+        rowNumber: trip?.rowNumber,
+        // Send original data as a fallback for finding the row
+        date: trip?.date,
+        plateNumber: trip?.plateNumber,
+        dredgerCode: dredgers.find((d) => d.id === trip?.dredgerId)?.code || ""
       };
     } else if (type === "payment") {
       const payment = payments.find((p) => p.id === id);
