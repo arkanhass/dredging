@@ -706,13 +706,8 @@ const DredgingDashboard: React.FC = () => {
     // Now handle the server-side update in the background
     (async () => {
       if (oldItem) {
-        const oldDredger = dredgers.find(d => d.id === oldItem.dredgerId);
         const deleteData = {
-          rowNumber: oldItem.rowNumber, // PRIMARY KEY: The exact row number from Sheets
-          reference: oldItem.reference,
-          date: oldItem.date,
-          dredgerCode: oldDredger?.code || "",
-          plateNumber: oldItem.plateNumber
+          rowNumber: oldItem.rowNumber, // USE ONLY ROW NUMBER
         };
         
         try {
@@ -850,11 +845,7 @@ const DredgingDashboard: React.FC = () => {
       setTrips((prev) => prev.filter((t) => t.id !== id));
       actionName = "deleteTrip";
       actionData = {
-        rowNumber: trip?.rowNumber,
-        reference: trip?.reference,
-        date: trip?.date,
-        dredgerCode: dredgers.find((d) => d.id === trip?.dredgerId)?.code,
-        plateNumber: trip?.plateNumber
+        rowNumber: trip?.rowNumber // USE ONLY ROW NUMBER
       };
     } else if (type === "payment") {
       const payment = payments.find((p) => p.id === id);
