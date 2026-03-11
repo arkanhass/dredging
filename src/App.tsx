@@ -79,6 +79,7 @@ interface Trip {
   dredgerBillingCbm?: number; // stored for reference
   dumpingLocation: string;
   notes: string;
+  reference: string; // Added: Unique identifier for each trip row
 }
 
 interface Payment {
@@ -373,6 +374,9 @@ const DredgingDashboard: React.FC = () => {
             ? dredgerAmount
             : tripsCount * effDBilling * dredgerRate;
 
+          // Reference for unique row identification (Column M, index 12)
+          const ref = (row[12] || `trip-ref-${i}-${Date.now()}`).toString().trim();
+
           return {
             id: `trip-${i}`,
             date: rawDate,
@@ -391,6 +395,7 @@ const DredgingDashboard: React.FC = () => {
             dredgerBillingCbm: dBillingRaw ?? undefined, // Store EXACT override or undefined
             dumpingLocation: row[7],
             notes: row[8] || "",
+            reference: ref,
           } satisfies Trip;
         })
       );
@@ -658,6 +663,8 @@ const DredgingDashboard: React.FC = () => {
     const dredgerAmount = tripForm.dredgerAmount ?? (tripsCount * dBillingProfile * dredgerRate);
     const transporterAmount = tripForm.transporterAmount ?? (tripsCount * tBillingProfile * transporterRate);
 
+    const refToUse = editingItem?.reference || `TRIP-${Date.now()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+
     const newTrip: Trip = {
       id: editingItem ? editingItem.id : `temp-${Date.now()}`,
       date: tripForm.date || "",
@@ -676,6 +683,7 @@ const DredgingDashboard: React.FC = () => {
       dredgerBillingCbm: undefined, 
       dumpingLocation: tripForm.dumpingLocation || "",
       notes: tripForm.notes || "",
+      reference: refToUse,
     };
 
     // CLOSE MODAL AND UPDATE UI IMMEDIATELY
@@ -694,11 +702,8 @@ const DredgingDashboard: React.FC = () => {
     // Now handle the server-side update in the background
     (async () => {
       if (oldItem) {
-        const oldDredger = dredgers.find(d => d.id === oldItem.dredgerId);
         const deleteData = {
-          date: oldItem.date,
-          dredgerCode: oldDredger?.code || "",
-          plateNumber: oldItem.plateNumber // ADDED: Plate number as part of the primary key
+          reference: oldItem.reference // Using the unique reference to identify and delete
         };
         
         try {
@@ -728,6 +733,7 @@ const DredgingDashboard: React.FC = () => {
         TransporterAmount: transporterAmount,
         TransporterBillingCbm: "", // No overrides from form anymore
         DredgerBillingCbm: "", // No overrides from form anymore
+        Reference: newTrip.reference, // Include the unique reference
       };
 
       submitToAppsScript("saveTrip", tripData, () => {
@@ -835,9 +841,7 @@ const DredgingDashboard: React.FC = () => {
       setTrips((prev) => prev.filter((t) => t.id !== id));
       actionName = "deleteTrip";
       actionData = {
-        date: trip?.date,
-        dredgerCode: dredgers.find((d) => d.id === trip?.dredgerId)?.code,
-        plateNumber: trip?.plateNumber // ADDED: Plate number as part of the primary key
+        reference: trip?.reference
       };
     } else if (type === "payment") {
       const payment = payments.find((p) => p.id === id);
