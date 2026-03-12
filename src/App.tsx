@@ -2484,9 +2484,13 @@ const DredgingDashboard: React.FC = () => {
                           <div className="flex justify-end space-x-2">
                             <button
                             onClick={() => {
+                              const truck = transporters.flatMap(t => t.trucks).find(tr => tr.id === trip.truckId);
                               const tripToEdit = {
                                 ...trip,
-                                date: toSortableISO(trip.date)
+                                date: toSortableISO(trip.date),
+                                // When editing, default the form's CBM to the value that was used for the transporter calculation.
+                                // Priority: 1. Manual override saved with the trip. 2. Truck's default transporter CBM. 3. Truck's physical CBM.
+                                capacityCbm: trip.transporterBillingCbm ?? truck?.transporterBillingCbm ?? truck?.capacityCbm ?? trip.capacityCbm,
                               };
                               setEditingItem(tripToEdit);
                               setTripForm(tripToEdit);
