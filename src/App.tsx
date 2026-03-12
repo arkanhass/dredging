@@ -661,9 +661,12 @@ const DredgingDashboard: React.FC = () => {
     const dredgerRate = tripForm.dredgerRate ?? dredger?.ratePerCbm ?? 0;
     const transporterRate = tripForm.transporterRate ?? truck?.ratePerCbm ?? transporter?.ratePerCbm ?? 0;
 
-    // Use truck profile billing CBMs strictly for internal calculations
-    const tBillingProfile = truck?.transporterBillingCbm || truck?.capacityCbm || 0;
-    const dBillingProfile = truck?.dredgerBillingCbm || tBillingProfile;
+    // Manual CBM override from the form or fallback to truck profile
+    const manualCbm = tripForm.capacityCbm && tripForm.capacityCbm > 0 ? tripForm.capacityCbm : null;
+
+    // Use manual override if present, otherwise truck profile billing CBMs
+    const tBillingProfile = manualCbm ?? (truck?.transporterBillingCbm || truck?.capacityCbm || 0);
+    const dBillingProfile = manualCbm ?? (truck?.dredgerBillingCbm || (truck?.transporterBillingCbm || truck?.capacityCbm || 0));
 
     const dredgerAmount = tripForm.dredgerAmount ?? (tripsCount * dBillingProfile * dredgerRate);
     const transporterAmount = tripForm.transporterAmount ?? (tripsCount * tBillingProfile * transporterRate);
@@ -678,14 +681,14 @@ const DredgingDashboard: React.FC = () => {
       truckId: tripForm.truckId || "",
       plateNumber: truck?.plateNumber || "",
       trips: tripsCount,
-      capacityCbm: dBillingProfile, // We use dredger capacity for total volume
+      capacityCbm: dBillingProfile, 
       totalVolume: tripsCount * dBillingProfile,
       dredgerRate,
       transporterRate,
       dredgerAmount,
       transporterAmount,
-      transporterBillingCbm: undefined, 
-      dredgerBillingCbm: undefined, 
+      transporterBillingCbm: manualCbm ?? undefined, 
+      dredgerBillingCbm: manualCbm ?? undefined, 
       dumpingLocation: tripForm.dumpingLocation || "",
       notes: tripForm.notes || "",
       reference: refToUse,
@@ -717,8 +720,8 @@ const DredgingDashboard: React.FC = () => {
       Notes: newTrip.notes || "",
       DredgerAmount: dredgerAmount,
       TransporterAmount: transporterAmount,
-      TransporterBillingCbm: "", 
-      DredgerBillingCbm: "", 
+      TransporterBillingCbm: manualCbm || "", 
+      DredgerBillingCbm: manualCbm || "", 
       Reference: newTrip.reference,
       // If editing, include the row number to be replaced
       rowNumber: oldItem?.rowNumber,
@@ -3439,9 +3442,13 @@ const DredgingDashboard: React.FC = () => {
                 <select
                   value={tripForm.truckId || ""}
                   onChange={(e) => {
+                    const selectedTruckId = e.target.value;
+                    const allTrucks = transporters.flatMap((t) => t.trucks);
+                    const truck = allTrucks.find((tr) => tr.id === selectedTruckId);
                     setTripForm({
                       ...tripForm,
-                      truckId: e.target.value,
+                      truckId: selectedTruckId,
+                      capacityCbm: truck?.transporterBillingCbm || truck?.capacityCbm || 0,
                     });
                   }}
                   className="w-full px-3 py-2 border rounded-lg"
@@ -3458,15 +3465,28 @@ const DredgingDashboard: React.FC = () => {
                     ))}
                 </select>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Number of Trips</label>
-                <input
-                  type="number"
-                  value={tripForm.trips || ""}
-                  onChange={(e) => setTripForm({ ...tripForm, trips: parseInt(e.target.value) })}
-                  className="w-full px-3 py-2 border rounded-lg"
-                  placeholder="0"
-                />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Capacity (CBM)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={tripForm.capacityCbm || ""}
+                    onChange={(e) => setTripForm({ ...tripForm, capacityCbm: parseFloat(e.target.value) })}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                    placeholder="0.00"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Number of Trips</label>
+                  <input
+                    type="number"
+                    value={tripForm.trips || ""}
+                    onChange={(e) => setTripForm({ ...tripForm, trips: parseInt(e.target.value) })}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                    placeholder="0"
+                  />
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">Dumping Location</label>
