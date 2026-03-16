@@ -884,7 +884,7 @@ const DredgingDashboard: React.FC = () => {
       )
     );
 
-    submitToAppsScript("saveTransporter", truckData, () => {
+    submitToAppsScript("addTruck", truckData, () => {
       console.log("Truck saved to sheet");
     }, false);
   };
@@ -1328,6 +1328,7 @@ const DredgingDashboard: React.FC = () => {
           "Dredger": "",
           "Transporter": "",
           "Truck": "",
+          "Cubic Capacity": "",
           "Trips": group.totalTrips,
           "Volume (CBM)": group.totalVolume,
           "Amount": group.totalAmount
@@ -1336,15 +1337,18 @@ const DredgingDashboard: React.FC = () => {
           const dredger = dredgers.find(d => d.id === row.dredgerId);
           const transporter = transporters.find(t => t.id === row.transporterId);
           const truck = transporter?.trucks.find(tr => tr.id === row.truckId || tr.plateNumber === row.plateNumber);
-          const capacityCbm = row.capacityCbm ?? truck?.capacityCbm ?? 0;
-          const totalVolume = row.totalVolume ?? (capacityCbm * (row.trips ?? 0));
+          const truckCapacity = truck?.transporterBillingCbm || truck?.capacityCbm || 0;
+          const rowRate = row.transporterRate || transporter?.ratePerCbm || 0;
+          const rowTrips = row.trips ?? 0;
+          const totalVolume = (rowRate > 0 && rowTrips > 0) ? (row.transporterAmount || 0) / rowRate / rowTrips : 0;
           exportData.push({
             "Date / Group": row.date,
             "Dredger": dredger?.name || "",
             "Transporter": transporter?.name || "",
             "Truck": truck ? `${truck.truckName || ""} (${truck.plateNumber})` : row.plateNumber,
+            "Cubic Capacity": truckCapacity,
             "Trips": row.trips,
-            "Volume (CBM)": totalVolume,
+            "Volume (CBM)": Math.round(totalVolume * 100) / 100,
             "Amount": row.transporterAmount || 0
           });
         });
@@ -2162,6 +2166,7 @@ const DredgingDashboard: React.FC = () => {
                             <th className="px-3 py-2 text-left">Dredger</th>
                             <th className="px-3 py-2 text-left">Transporter</th>
                             <th className="px-3 py-2 text-left">Truck</th>
+                            <th className="px-3 py-2 text-right">Cubic Capacity</th>
                             <th className="px-3 py-2 text-right">Trips</th>
                             <th className="px-3 py-2 text-right">Volume (CBM)</th>
                             <th className="px-3 py-2 text-right">Amount</th>
@@ -2172,17 +2177,20 @@ const DredgingDashboard: React.FC = () => {
                             const dredger = dredgers.find((d) => d.id === row.dredgerId);
                             const transporter = transporters.find((t) => t.id === row.transporterId);
                             const truck = transporter?.trucks.find((tr) => tr.id === row.truckId || tr.plateNumber === row.plateNumber);
-                            const capacityCbm = row.capacityCbm ?? truck?.capacityCbm ?? 0;
-                            const totalVolume = row.totalVolume ?? capacityCbm * (row.trips ?? 0);
+                            const truckCapacity = truck?.transporterBillingCbm || truck?.capacityCbm || 0;
                             const rowAmount = row.transporterAmount ?? 0;
+                            const rowRate = row.transporterRate || transporter?.ratePerCbm || 0;
+                            const rowTrips = row.trips ?? 0;
+                            const totalVolume = (rowRate > 0 && rowTrips > 0) ? rowAmount / rowRate / rowTrips : 0;
                             return (
                               <tr key={row.id} className="border-t">
                                 <td className="px-3 py-2">{formatDisplayDate(row.date)}</td>
                                 <td className="px-3 py-2">{dredger?.name}</td>
                                 <td className="px-3 py-2">{transporter?.name}</td>
                                 <td className="px-3 py-2 font-mono text-xs">{truck ? `${truck.truckName || ""} (${truck.plateNumber})` : row.plateNumber}</td>
-                                <td className="px-3 py-2 text-right">{row.trips}</td>
-                                <td className="px-3 py-2 text-right">{totalVolume.toLocaleString()}</td>
+                                <td className="px-3 py-2 text-right">{truckCapacity.toLocaleString()}</td>
+                                <td className="px-3 py-2 text-right">{rowTrips}</td>
+                                <td className="px-3 py-2 text-right">{totalVolume.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
                                 <td className="px-3 py-2 text-right font-medium">{formatCurrency(rowAmount)}</td>
                               </tr>
                             );
@@ -2190,7 +2198,7 @@ const DredgingDashboard: React.FC = () => {
                         </tbody>
                         <tfoot className="bg-gray-50 font-semibold">
                           <tr>
-                            <td className="px-3 py-2" colSpan={4}>Group Totals</td>
+                            <td className="px-3 py-2" colSpan={5}>Group Totals</td>
                             <td className="px-3 py-2 text-right">{group.totalTrips.toLocaleString()}</td>
                             <td className="px-3 py-2 text-right">{group.totalVolume.toLocaleString()}</td>
                             <td className="px-3 py-2 text-right text-blue-700">{formatCurrency(group.totalAmount)}</td>
