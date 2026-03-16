@@ -884,7 +884,7 @@ const DredgingDashboard: React.FC = () => {
       )
     );
 
-    submitToAppsScript("addTruck", truckData, () => {
+    submitToAppsScript("saveTransporter", truckData, () => {
       console.log("Truck saved to sheet");
     }, false);
   };
