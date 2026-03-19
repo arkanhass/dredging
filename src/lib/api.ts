@@ -30,39 +30,35 @@ export interface ApiResponse<T = any> {
 export const api = {
   // Generic call – supports both GET (query params) and POST (json body)
   async request<T>(action: Action, params: Record<string, any> = {}): Promise<ApiResponse<T>> {
-    const url = new URL(BASE_URL);
-    url.searchParams.append("action", action);
+  const url = new URL(BASE_URL);
+  url.searchParams.append("action", action);
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null) {
+      url.searchParams.append(key, String(value));
+    }
+  });
 
-    // Add any extra query params (useful for future filtering)
-    Object.entries(params).forEach(([key, value]) => {
-      if (value !== undefined && value !== null) {
-        url.searchParams.append(key, String(value));
-      }
+  try {
+    const response = await fetch(url.toString(), {
+      method: "GET",
+      mode: "cors",                // keep this
+      redirect: "follow",          // important - GAS redirects responses
+      headers: {
+        "Content-Type": "text/plain;charset=UTF-8"  // ← KEY CHANGE: avoid application/json
+      },
     });
 
-    try {
-      const response = await fetch(url.toString(), {
-        method: "GET", // we prefer GET for reads when possible
-        headers: { "Content-Type": "application/json" },
-        mode: 'cors',  // explicit
-  // For testing: mode: 'no-cors' (opaque response, but can't read JSON)
-        // If we ever need to force POST for some actions, we can add condition here later
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const json = await response.json();
-      return json as ApiResponse<T>;
-    } catch (err) {
-      console.error(`API request failed for ${action}:`, err);
-      return {
-        success: false,
-        error: err instanceof Error ? err.message : "Unknown error",
-      };
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
     }
-  },
+
+    const json = await response.json();
+    return json as ApiResponse<T>;
+  } catch (err) {
+    console.error(`API request failed for ${action}:`, err);
+    return { success: false, error: err.message || "Unknown error" };
+  }
+}
 
   // Convenience wrappers – feel free to use these in components / hooks
   getDredgers: () => api.request("getDredgers"),
