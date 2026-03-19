@@ -1,6 +1,6 @@
 // src/lib/api.ts
 const BASE_URL = "https://script.google.com/macros/s/AKfycbytcTFRquKWvg6ZnUf_HDbyNp0DOtA4cB7UWfOa577SKEMKkPi7nli_uslOpv3zUikV_g/exec";
-
+//https://script.google.com/macros/s/AKfycbytcTFRquKWvg6ZnUf_HDbyNp0DOtA4cB7UWfOa577SKEMKkPi7nli_uslOpv3zUikV_g/exec
 export type Action =
   | "saveDredger"
   | "saveTransporter"
@@ -44,6 +44,8 @@ export const api = {
       const response = await fetch(url.toString(), {
         method: "GET", // we prefer GET for reads when possible
         headers: { "Content-Type": "application/json" },
+        mode: 'cors',  // explicit
+  // For testing: mode: 'no-cors' (opaque response, but can't read JSON)
         // If we ever need to force POST for some actions, we can add condition here later
       });
 
