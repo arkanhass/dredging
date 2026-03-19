@@ -132,7 +132,7 @@ const DredgingDashboard: React.FC = () => {
   // Queries
   const { data: dredgers = [], isLoading: dredgersLoading } = useDredgers();
   const { data: transporters = [], isLoading: transportersLoading } = useTransporters();
-  const { data: trips = [], isLoading: tripsLoading } = useTrips();
+  const { data: trips = [], isLoading: tripsLoading, error: tripsError } = useTrips();
   const { data: payments = [], isLoading: paymentsLoading } = usePayments();
 
   const { mutate: saveEntity, isPending: isSaving } = useSaveEntity();
@@ -168,17 +168,18 @@ const DredgingDashboard: React.FC = () => {
 
   // Filtered Data using Global Filter
   const filteredTrips = useMemo(() => {
-    return trips.filter((t) => {
-      const iso = toSortableISO(t.date);
-      const inRange =
-        (!globalDateFilter.start || iso >= globalDateFilter.start) &&
-        (!globalDateFilter.end || iso <= globalDateFilter.end);
-      const matchesSearch = !searchTerm || 
-        t.plateNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        t.dumpingLocation.toLowerCase().includes(searchTerm.toLowerCase());
-      return inRange && matchesSearch;
-    });
-  }, [trips, globalDateFilter, searchTerm]);
+  const tripsArray = trips ?? []; // fallback
+  return tripsArray.filter((t) => {
+    const iso = toSortableISO(t.date ?? ''); // safe
+    const inRange =
+      (!globalDateFilter.start || iso >= globalDateFilter.start) &&
+      (!globalDateFilter.end || iso <= globalDateFilter.end);
+    const matchesSearch = !searchTerm ||
+      (t.plateNumber ?? '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (t.dumpingLocation ?? '').toLowerCase().includes(searchTerm.toLowerCase());
+    return inRange && matchesSearch;
+  });
+}, [trips, globalDateFilter, searchTerm]);
 
   // Dashboard Stats (using global filter)
   const dashboardStats = useMemo(() => ({
@@ -191,27 +192,28 @@ const DredgingDashboard: React.FC = () => {
 
   // Charts Data
   const monthlyVolumeData = useMemo(() => {
-    const map = new Map<string, number>();
-    filteredTrips.forEach((t) => {
-      const month = t.date.substring(0, 7); // YYYY-MM
-      map.set(month, (map.get(month) || 0) + (t.totalVolume ?? 0));
-    });
-    return Array.from(map.entries())
-      .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([month, volume]) => ({ month, volume: Math.round(volume) }));
-  }, [filteredTrips]);
+  const map = new Map<string, number>();
+  (filteredTrips ?? []).forEach((t) => {
+    const dateStr = t.date ?? '';  // fallback if undefined
+    const month = dateStr.substring(0, 7) || 'Unknown';
+    map.set(month, (map.get(month) || 0) + (t.totalVolume ?? 0));
+  });
+  return Array.from(map.entries())
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([month, volume]) => ({ month, volume: Math.round(volume) }));
+}, [filteredTrips]);
 
   const topTransportersData = useMemo(() => {
-    const map = new Map<string, number>();
-    filteredTrips.forEach((t) => {
-      const name = transporters.find(tr => tr.id === t.transporterId)?.name || "Unknown";
-      map.set(name, (map.get(name) || 0) + (t.totalVolume ?? 0));
-    });
-    return Array.from(map.entries())
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5)
-      .map(([name, volume]) => ({ name, volume: Math.round(volume) }));
-  }, [filteredTrips, transporters]);
+  const map = new Map<string, number>();
+  (filteredTrips ?? []).forEach((t) => {
+    const name = transporters.find(tr => tr.id === t.transporterId)?.name || "Unknown";
+    map.set(name, (map.get(name) || 0) + (t.totalVolume ?? 0));
+  });
+  return Array.from(map.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([name, volume]) => ({ name, volume: Math.round(volume) }));
+}, [filteredTrips, transporters]);
 
   // ────────────────────────────────────────────────
   // CRUD Handlers (using new mutation)
