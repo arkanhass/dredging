@@ -58,7 +58,7 @@ export const api = {
     console.error(`API request failed for ${action}:`, err);
     return { success: false, error: err.message || "Unknown error" };
   }
-}
+}}
 
   // Convenience wrappers – feel free to use these in components / hooks
   getDredgers: () => api.request("getDredgers"),
