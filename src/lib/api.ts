@@ -1,6 +1,6 @@
 // src/lib/api.ts
 const BASE_URL = "https://script.google.com/macros/s/AKfycbytcTFRquKWvg6ZnUf_HDbyNp0DOtA4cB7UWfOa577SKEMKkPi7nli_uslOpv3zUikV_g/exec";
-//https://script.google.com/macros/s/AKfycbytcTFRquKWvg6ZnUf_HDbyNp0DOtA4cB7UWfOa577SKEMKkPi7nli_uslOpv3zUikV_g/exec
+
 export type Action =
   | "saveDredger"
   | "saveTransporter"
@@ -30,35 +30,36 @@ export interface ApiResponse<T = any> {
 export const api = {
   // Generic call – supports both GET (query params) and POST (json body)
   async request<T>(action: Action, params: Record<string, any> = {}): Promise<ApiResponse<T>> {
-  const url = new URL(BASE_URL);
-  url.searchParams.append("action", action);
-  Object.entries(params).forEach(([key, value]) => {
-    if (value !== undefined && value !== null) {
-      url.searchParams.append(key, String(value));
-    }
-  });
+    const url = new URL(BASE_URL);
+    url.searchParams.append("action", action);
 
-  try {
-    const response = await fetch(url.toString(), {
-      method: "GET",
-      mode: "cors",                // keep this
-      redirect: "follow",          // important - GAS redirects responses
-      headers: {
-        "Content-Type": "text/plain;charset=UTF-8"  // ← KEY CHANGE: avoid application/json
-      },
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) {
+        url.searchParams.append(key, String(value));
+      }
     });
 
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
+    try {
+      const response = await fetch(url.toString(), {
+        method: "GET",
+        mode: "cors",
+        redirect: "follow",
+        headers: {
+          "Content-Type": "text/plain;charset=UTF-8"  // avoids preflight in many cases
+        },
+      });
 
-    const json = await response.json();
-    return json as ApiResponse<T>;
-  } catch (err) {
-    console.error(`API request failed for ${action}:`, err);
-    return { success: false, error: err.message || "Unknown error" };
-  }
-}}
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const json = await response.json();
+      return json as ApiResponse<T>;
+    } catch (err) {
+      console.error(`API request failed for ${action}:`, err);
+      return { success: false, error: err instanceof Error ? err.message : "Unknown error" };
+    }
+  },  // ← THIS COMMA WAS MISSING (after request function)
 
   // Convenience wrappers – feel free to use these in components / hooks
   getDredgers: () => api.request("getDredgers"),
