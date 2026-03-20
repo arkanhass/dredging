@@ -334,43 +334,6 @@ const calculateTransporterEarnings = (transporterId: string) => {
 };
 
 
-const calculateDredgerEarnings = (dredgerId: string) => {
-  const relevantTrips = trips.filter(t => t.dredgerId === dredgerId);
-  
-  const totalVolume = relevantTrips.reduce((sum, t) => sum + (t.totalVolume || 0), 0);
-  const totalAmount = relevantTrips.reduce((sum, t) => sum + (t.dredgerAmount || 0), 0);
-  
-  const totalPaid = payments
-    .filter(p => p.entityType === "dredger" && p.entityId === dredgerId)
-    .reduce((sum, p) => sum + (p.amount || 0), 0);
-
-  return {
-    totalVolume,
-    totalAmount,
-    totalPaid,
-    balance: totalAmount - totalPaid,
-  };
-};
-
-const calculateTransporterEarnings = (transporterId: string) => {
-  const relevantTrips = trips.filter(t => t.transporterId === transporterId);
-  
-  const totalTrips = relevantTrips.reduce((sum, t) => sum + (t.trips || 0), 0);
-  const totalVolume = relevantTrips.reduce((sum, t) => sum + (t.totalVolume || 0), 0);
-  const totalAmount = relevantTrips.reduce((sum, t) => sum + (t.transporterAmount || 0), 0);
-  
-  const totalPaid = payments
-    .filter(p => p.entityType === "transporter" && p.entityId === transporterId)
-    .reduce((sum, p) => sum + (p.amount || 0), 0);
-
-  return {
-    totalTrips,
-    totalVolume,
-    totalAmount,
-    totalPaid,
-    balance: totalAmount - totalPaid,
-  };
-};
 
 useEffect(() => {
     loadDataFromSheets();
