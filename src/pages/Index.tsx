@@ -282,92 +282,95 @@ const DredgingDashboard: React.FC = () => {
 
       // Trips - updated to respect ActualLoadedCbm
       const tripRes = await fetch(
-        `https://sheets.googleapis.com/v4/spreadsheets/${GOOGLE_SHEETS_CONFIG.spreadsheetId}/values/Trips?key=${GOOGLE_SHEETS_CONFIG.apiKey}`
-      );
-      const tripData = await tripRes.json();
-      console.log("Trips sheet - number of rows:", tripData.values?.length || 0);
-console.log("First data row (index 1):", tripData.values?.[1]);
-console.log("Reference column sample (index 14):", tripData.values?.[1]?.[14]);
-try {
-      setTrips(
-  (tripData.values || []).slice(1).filter((row: any[]) => {
-    const hasDate = row[0] && row[0].toString().trim() !== "";
-    const hasDredger = row[1] && row[1].toString().trim() !== "";
-    const hasTransporter = row[2] && row[2].toString().trim() !== "";
-    const hasTrips = row[4] && parseInt(row[4]) > 0;
-    return hasDate && hasDredger && hasTransporter && hasTrips;
-  }).map((row: any[], i: number) => {
-  const rawDate = row[0] || "";
-  const dredgerCode = (row[1] || "").toString().trim();
-  const transporterCode = (row[2] || "").toString().trim();
-  const plateNumber = (row[3] || "").toString().trim();
-
-  const transporter = transporterMap.get(transporterCode);
-  const truck = transporter?.trucks.find((t: any) =>
-    (t.plateNumber || "").trim().toUpperCase() === plateNumber.toUpperCase()
-  );
-
-  const tripCbmRaw = parseMoney(row[11]);          // L - TripCBM
-  const actualLoadedCbmRaw = parseMoney(row[12]);  // M - ActualLoadedCbm
-  const totalTripsVolumeRaw = parseMoney(row[13]); // N - TotalTripsVolume
-
-  const tripsCount = parseInt(row[4]) || 0;
-  const dredgerRate = parseMoney(row[5]) || 0;
-  const transporterRate = parseMoney(row[6]) || truck?.ratePerCbm || transporter?.ratePerCbm || 0;
-  const dredgerAmount = parseMoney(row[9]);
-  const transporterAmount = parseMoney(row[10]);
-
-  const tripCbm = actualLoadedCbmRaw !== null && actualLoadedCbmRaw > 0
-    ? actualLoadedCbmRaw
-    : (tripCbmRaw !== null && tripCbmRaw > 0
-        ? tripCbmRaw
-        : (truck?.transporterBillingCbm || truck?.dredgerBillingCbm || truck?.capacityCbm || 0));
-
-  const totalVolume = totalTripsVolumeRaw !== null && totalTripsVolumeRaw > 0
-    ? totalTripsVolumeRaw
-    : tripsCount * tripCbm;
-
-  const billedTransporterAmount = transporterAmount !== null
-    ? transporterAmount
-    : tripsCount * tripCbm * transporterRate;
-
-  const billedDredgerAmount = dredgerAmount !== null
-    ? dredgerAmount
-    : tripsCount * tripCbm * dredgerRate;
-
-  // Read real Reference if column O exists, else fallback
-  const ref = row[14] ? String(row[14]).trim() : `trip-ref-${i}-${Date.now()}`;
-
-  const rowNumber = i + 2;
-
-  return {
-    id: `trip-${i}`,
-    date: rawDate,
-    dredgerId: loadedDredgers.find((d) => d.code === dredgerCode)?.id || "",
-    transporterId: transporterCode,
-    truckId: truck?.id || "",
-    plateNumber,
-    trips: tripsCount,
-    capacityCbm: tripCbm,
-    totalVolume,
-    dredgerRate,
-    transporterRate,
-    dredgerAmount: billedDredgerAmount,
-    transporterAmount: billedTransporterAmount,
-    tripCbm,
-    totalTripsVolume: totalVolume,
-    dumpingLocation: row[7] || "",
-    notes: row[8] || "",
-    reference: ref,
-    rowNumber,
-    actualLoadedCbm: actualLoadedCbmRaw ?? undefined,
-  } satisfies Trip;
-
-})
+  `https://sheets.googleapis.com/v4/spreadsheets/${GOOGLE_SHEETS_CONFIG.spreadsheetId}/values/Trips?key=${GOOGLE_SHEETS_CONFIG.apiKey}`
 );
+const tripData = await tripRes.json();
+
+console.log("Trips sheet - number of rows:", tripData.values?.length || 0);
+console.log("First data row (index 1):", tripData.values?.[1]);
+console.log("Column count in first row:", tripData.values?.[1]?.length || 0);
+
+try {
+  setTrips(
+    (tripData.values || []).slice(1)
+      .filter((row: any[]) => {
+        const hasDate = row[0] && row[0].toString().trim() !== "";
+        const hasDredger = row[1] && row[1].toString().trim() !== "";
+        const hasTransporter = row[2] && row[2].toString().trim() !== "";
+        const hasTrips = row[4] && parseInt(row[4]) > 0;
+        return hasDate && hasDredger && hasTransporter && hasTrips;
+      })
+      .map((row: any[], i: number) => {
+        const rawDate = row[0] || "";
+        const dredgerCode = (row[1] || "").toString().trim();
+        const transporterCode = (row[2] || "").toString().trim();
+        const plateNumber = (row[3] || "").toString().trim();
+
+        const transporter = transporterMap.get(transporterCode);
+        const truck = transporter?.trucks?.find((t: any) =>
+          (t.plateNumber || "").trim().toUpperCase() === plateNumber.toUpperCase()
+        ) || null; // defensive: null if undefined
+
+        const tripCbmRaw = parseMoney(row[11]);          // column L
+        const actualLoadedCbmRaw = parseMoney(row[12]);  // column M
+        const totalTripsVolumeRaw = parseMoney(row[13]); // column N
+
+        const tripsCount = parseInt(row[4]) || 0;
+        const dredgerRate = parseMoney(row[5]) || 0;
+        const transporterRate = parseMoney(row[6]) || truck?.ratePerCbm || transporter?.ratePerCbm || 0;
+        const dredgerAmount = parseMoney(row[9]);
+        const transporterAmount = parseMoney(row[10]);
+
+        const tripCbm = actualLoadedCbmRaw !== null && actualLoadedCbmRaw > 0
+          ? actualLoadedCbmRaw
+          : (tripCbmRaw !== null && tripCbmRaw > 0
+              ? tripCbmRaw
+              : (truck?.transporterBillingCbm || truck?.dredgerBillingCbm || truck?.capacityCbm || 0));
+
+        const totalVolume = totalTripsVolumeRaw !== null && totalTripsVolumeRaw > 0
+          ? totalTripsVolumeRaw
+          : tripsCount * tripCbm;
+
+        const billedTransporterAmount = transporterAmount !== null
+          ? transporterAmount
+          : tripsCount * tripCbm * transporterRate;
+
+        const billedDredgerAmount = dredgerAmount !== null
+          ? dredgerAmount
+          : tripsCount * tripCbm * dredgerRate;
+
+        // Reference: try to read from column O (index 14), fallback if missing/extra columns
+        const ref = row[14] ? String(row[14]).trim() : `trip-ref-${i}-${Date.now()}`;
+
+        const rowNumber = i + 2;
+
+        return {
+          id: `trip-${i}`,
+          date: rawDate,
+          dredgerId: loadedDredgers.find((d) => d.code === dredgerCode)?.id || "",
+          transporterId: transporterCode,
+          truckId: truck?.id || "",
+          plateNumber,
+          trips: tripsCount,
+          capacityCbm: tripCbm,
+          totalVolume,
+          dredgerRate,
+          transporterRate,
+          dredgerAmount: billedDredgerAmount,
+          transporterAmount: billedTransporterAmount,
+          tripCbm,
+          totalTripsVolume: totalVolume,
+          dumpingLocation: row[7] || "",
+          notes: row[8] || "",
+          reference: ref,
+          rowNumber,
+          actualLoadedCbm: actualLoadedCbmRaw ?? undefined,
+        } satisfies Trip;
+      })
+  );
 } catch (tripsError) {
-  console.error("Trips processing failed:", tripsError);
-  setTrips([]); // fallback to empty
+  console.error("Trips loading/processing failed:", tripsError);
+  setTrips([]); // prevent crash - show empty table
 }
       // Payments (unchanged)
       const payRes = await fetch(
