@@ -237,6 +237,17 @@ const DredgingDashboard: React.FC = () => {
   // Keep your existing modals and forms, just update the onClick handlers to use handleSave
 
   return (
+    {process.env.NODE_ENV === 'development' && (
+  <div className="bg-yellow-100 p-4 mb-6 rounded border border-yellow-300">
+    <h3 className="font-bold mb-2">Debug: Raw API Data</h3>
+    <pre className="text-xs overflow-auto max-h-60">
+      Trips (count: {trips?.length ?? 'undefined'}): {JSON.stringify(trips?.slice(0, 3) ?? 'no data', null, 2)}
+    </pre>
+    <pre className="text-xs overflow-auto max-h-60">
+      Dredgers (count: {dredgers?.length ?? 'undefined'}): {JSON.stringify(dredgers?.slice(0, 3) ?? 'no data', null, 2)}
+    </pre>
+  </div>
+)}
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <header className="bg-gradient-to-r from-blue-900 to-indigo-900 text-white shadow-xl">
