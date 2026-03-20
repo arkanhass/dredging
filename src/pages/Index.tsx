@@ -209,7 +209,18 @@ const DredgingDashboard: React.FC = () => {
   const transporterFileInput = useRef<HTMLInputElement>(null);
   const tripsFileInput = useRef<HTMLInputElement>(null);
   const paymentsFileInput = useRef<HTMLInputElement>(null);
+const latestTripDisplay = useMemo(() => {
+    if (trips.length === 0) return null;
 
+    const sortedTrips = [...trips].sort((a, b) => {
+      const dateA = new Date(toSortableISO(a.date));
+      const dateB = new Date(toSortableISO(b.date));
+      return dateB.getTime() - dateA.getTime();
+    });
+
+    const latestDate = sortedTrips[0]?.date;
+    return latestDate ? formatDisplayDate(latestDate) : null;
+  }, [trips]);
   useEffect(() => {
     loadDataFromSheets();
   }, []);
