@@ -405,26 +405,29 @@ const handleAddTruckSubmit = () => {
     return;
   }
 
-  // Find the transporter
+  // Find transporter index and transporter object
   const transporterIndex = transporters.findIndex(t => t.id === transporterId);
   if (transporterIndex === -1) {
     alert("Transporter not found.");
     return;
   }
 
+  // Get the actual transporter object
+  const transporter = transporters[transporterIndex];
+
   const newTruck: TruckRecord = {
     id: `${transporterId}-${plateNumber.trim().toUpperCase()}`,
     plateNumber: plateNumber.trim(),
     truckName: truckName?.trim() || "Unnamed",
-    capacityCbm: transporterBillingCbm || dredgerBillingCbm || 0, // fallback
+    capacityCbm: transporterBillingCbm || dredgerBillingCbm || 0,
     transporterId,
     status: status || "active",
     transporterBillingCbm: transporterBillingCbm || 0,
     dredgerBillingCbm: dredgerBillingCbm || 0,
-    ratePerCbm: transporters[transporterIndex].ratePerCbm || 0, // inherit from transporter if needed
+    ratePerCbm: transporter.ratePerCbm || 0, // use the found transporter
   };
 
-  // Update transporters state (immutable update)
+  // Update frontend state
   setTransporters(prev => {
     const updated = [...prev];
     updated[transporterIndex] = {
@@ -434,9 +437,9 @@ const handleAddTruckSubmit = () => {
     return updated;
   });
 
-  // Save to GAS (this is what was missing)
+  // Save to GAS
   submitToAppsScript('addTruck', {
-    Code: transporter.code,                     // required for matching in GAS
+    Code: transporter.code,                     // ← use transporter.code (now defined)
     PlateNumber: newTruck.plateNumber,
     TruckName: newTruck.truckName,
     TransporterBillingCbm: newTruck.transporterBillingCbm,
@@ -444,11 +447,11 @@ const handleAddTruckSubmit = () => {
     Status: newTruck.status,
   }, () => {
     console.log("Truck added to GAS successfully");
-    // Optional: reload transporters from sheet if needed
+    // Optional: reload transporters if you want fresh data from sheet
     // loadDataFromSheets();
   });
 
-  // Close modal & reset form
+  // Close modal & reset
   setShowAddTruckModal(false);
   setTruckForm({ transporterId: "" });
 };
