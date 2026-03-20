@@ -504,69 +504,80 @@ try {
   console.log("First kept row:", filteredRows[0] || "none");
 
   setTrips(
-    filteredRows.map((row: any[], i: number) => {
-      const rawDate = row[0] || "";
-      const dredgerCode = (row[1] || "").toString().trim();
-      const transporterCode = (row[2] || "").toString().trim();
-      const plateNumber = (row[3] || "").toString().trim();
+  filteredRows.map((row: any[], i: number) => {
+    const rawDate = row[0] || "";
+    const dredgerCode = (row[1] || "").toString().trim();
+    const transporterCode = (row[2] || "").toString().trim();
+    const plateNumber = (row[3] || "").toString().trim();
 
-      const transporter = transporterMap.get(transporterCode) || null;
-      let truck = null;
-      if (transporter && Array.isArray(transporter.trucks)) {
-        truck = transporter.trucks.find((t: any) =>
-          t && t.plateNumber && String(t.plateNumber).trim().toUpperCase() === plateNumber.toUpperCase()
-        ) || null;
-      }
+    // Safe access
+    const transporter = transporterMap.get(transporterCode) || null;
+    let truck = null;
+    if (transporter && Array.isArray(transporter.trucks)) {
+      truck = transporter.trucks.find((t: any) =>
+        t && t.plateNumber && String(t.plateNumber).trim().toUpperCase() === plateNumber.toUpperCase()
+      ) || null;
+    }
 
-      const tripCbmRaw = parseMoney(row[11]);
-      const actualLoadedCbmRaw = parseMoney(row[12]);
-      const totalTripsVolumeRaw = parseMoney(row[13]);
+    // Parse safely
+    const tripCbmRaw = parseMoney(row[11]) ?? 0;
+    const actualLoadedCbmRaw = parseMoney(row[12]) ?? 0;
+    const totalTripsVolumeRaw = parseMoney(row[13]) ?? 0;
 
-      const tripsCount = Number(row[4]) || 0;
-      const dredgerRate = parseMoney(row[5]) || 0;
-      const transporterRate = parseMoney(row[6]) || (truck?.ratePerCbm || transporter?.ratePerCbm || 0);
-      const dredgerAmount = parseMoney(row[9]) || 0;
-      const transporterAmount = parseMoney(row[10]) || 0;
+    const tripsCount = Number(row[4]) || 0;
+    const dredgerRate = parseMoney(row[5]) ?? 0;
+    const transporterRate = parseMoney(row[6]) ?? (truck?.ratePerCbm ?? transporter?.ratePerCbm ?? 0);
 
-      const tripCbm = actualLoadedCbmRaw !== null && actualLoadedCbmRaw > 0
-        ? actualLoadedCbmRaw
-        : (tripCbmRaw !== null && tripCbmRaw > 0 ? tripCbmRaw : (truck?.transporterBillingCbm || truck?.dredgerBillingCbm || truck?.capacityCbm || 0));
+    const dredgerAmount = parseMoney(row[9]) ?? 0;
+    const transporterAmount = parseMoney(row[10]) ?? 0;
 
-      const totalVolume = totalTripsVolumeRaw !== null && totalTripsVolumeRaw > 0
-        ? totalTripsVolumeRaw
-        : tripsCount * tripCbm;
+    // Use actual loaded if present, else tripCbmRaw, else truck value
+    const tripCbm = actualLoadedCbmRaw > 0
+      ? actualLoadedCbmRaw
+      : (tripCbmRaw > 0 ? tripCbmRaw : (truck?.transporterBillingCbm ?? truck?.dredgerBillingCbm ?? truck?.capacityCbm ?? 0));
 
-      const billedTransporterAmount = transporterAmount > 0 ? transporterAmount : tripsCount * tripCbm * transporterRate;
-      const billedDredgerAmount = dredgerAmount > 0 ? dredgerAmount : tripsCount * tripCbm * dredgerRate;
+    const totalVolume = totalTripsVolumeRaw > 0
+      ? totalTripsVolumeRaw
+      : tripsCount * tripCbm;
 
-      const ref = (row.length > 14 && row[14]) ? String(row[14]).trim() : `trip-ref-${i}-${Date.now()}`;
+    const billedTransporterAmount = transporterAmount > 0
+      ? transporterAmount
+      : tripsCount * tripCbm * transporterRate;
 
-      const rowNumber = i + 2;
+    const billedDredgerAmount = dredgerAmount > 0
+      ? dredgerAmount
+      : tripsCount * tripCbm * dredgerRate;
 
-      return {
-        id: `trip-${i}`,
-        date: rawDate,
-        dredgerId: loadedDredgers.find((d) => d.code === dredgerCode)?.id || "",
-        transporterId: transporterCode,
-        truckId: truck?.id || "",
-        plateNumber,
-        trips: tripsCount,
-        capacityCbm: tripCbm,
-        totalVolume,
-        dredgerRate,
-        transporterRate,
-        dredgerAmount: billedDredgerAmount,
-        transporterAmount: billedTransporterAmount,
-        tripCbm,
-        totalTripsVolume: totalVolume,
-        dumpingLocation: row[7] ? String(row[7]) : "",
-        notes: row[8] ? String(row[8]) : "",
-        reference: ref,
-        rowNumber,
-        actualLoadedCbm: actualLoadedCbmRaw ?? undefined,
-      } satisfies Trip;
-    })
-  );
+    const ref = (row.length > 14 && row[14])
+      ? String(row[14]).trim()
+      : `trip-ref-${i}-${Date.now()}`;
+
+    const rowNumber = i + 2;
+
+    return {
+      id: `trip-${i}`,
+      date: rawDate,
+      dredgerId: loadedDredgers.find((d) => d.code === dredgerCode)?.id || "",
+      transporterId: transporterCode,
+      truckId: truck?.id || "",
+      plateNumber,
+      trips: tripsCount,
+      capacityCbm: tripCbm,
+      totalVolume,
+      dredgerRate,
+      transporterRate,
+      dredgerAmount: billedDredgerAmount,
+      transporterAmount: billedTransporterAmount,
+      tripCbm,
+      totalTripsVolume: totalVolume,
+      dumpingLocation: row[7] ? String(row[7]) : "",
+      notes: row[8] ? String(row[8]) : "",
+      reference: ref,
+      rowNumber,
+      actualLoadedCbm: actualLoadedCbmRaw > 0 ? actualLoadedCbmRaw : undefined,
+    } satisfies Trip;
+  })
+);
 
   console.log("Trips successfully processed and set:", trips.length);
 } catch (tripsError) {
