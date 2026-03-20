@@ -638,7 +638,12 @@ const totalVolume = tripsCount * tripCbm;  // always calculate since no TotalTri
     const dredgerAmount = tripForm.dredgerAmount ?? (tripsCount * tripCbmVal * dredgerRate);
     const transporterAmount = tripForm.transporterAmount ?? (tripsCount * tripCbmVal * transporterRate);
 
-    const refToUse = editingItem?.reference || `TRIP-${Date.now()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+    const generateReference = () => {
+  const yyyymmdd = new Date().toISOString().slice(0, 10).replace(/-/g, ""); // e.g. 20260320
+  const rand = Math.random().toString(36).slice(2, 10).toUpperCase();     // 8 chars = much safer
+  return `TRIP-${yyyymmdd}-${rand}`;
+};
+const refToUse = editingItem?.reference || generateReference(); // use your generateReference
 
     const newTrip: Trip = {
       id: editingItem ? editingItem.id : `temp-${Date.now()}`,
@@ -673,7 +678,7 @@ const totalVolume = tripsCount * tripCbm;  // always calculate since no TotalTri
       setTrips((prev) => [...prev, newTrip]);
     }
 
-const refToUse = editingItem?.reference || generateReference(); // use your generateReference
+
 
 const tripDataArray = [
   newTrip.date || "",
