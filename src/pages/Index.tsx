@@ -374,8 +374,7 @@ const filteredTrips = useMemo(() => {
 }, [trips, dateFilter, searchTerm, transporters]);
 
 
-explain for me the below code
-typescriptreact// 3. Load Trips
+// 3. Load Trips
       const tripRes = await fetch(
         `https://sheets.googleapis.com/v4/spreadsheets/${GOOGLE_SHEETS_CONFIG.spreadsheetId}/values/Trips?key=${GOOGLE_SHEETS_CONFIG.apiKey}`
       );
