@@ -439,17 +439,19 @@ const handleAddTruckSubmit = () => {
 
   // Save to GAS
   submitToAppsScript('addTruck', {
-    Code: transporter.code,                     // ← use transporter.code (now defined)
-    PlateNumber: newTruck.plateNumber,
-    TruckName: newTruck.truckName,
-    TransporterBillingCbm: newTruck.transporterBillingCbm,
-    DredgerBillingCbm: newTruck.dredgerBillingCbm,
-    Status: newTruck.status,
-  }, () => {
-    console.log("Truck added to GAS successfully");
-    // Optional: reload transporters if you want fresh data from sheet
-    // loadDataFromSheets();
-  });
+  Code: transporter.code,
+  Name: transporter.name,
+  RatePerCbm: transporter.ratePerCbm,
+  Status: transporter.status || "active",
+  Contractor: transporter.contractor || "",
+  ContractNumber: transporter.contractNumber || "",
+  PlateNumber: newTruck.plateNumber,
+  TruckName: newTruck.truckName,
+  TransporterBillingCbm: newTruck.transporterBillingCbm,
+  DredgerBillingCbm: newTruck.dredgerBillingCbm,
+}, () => {
+  console.log("Truck added to GAS successfully");
+});
 
   // Close modal & reset
   setShowAddTruckModal(false);
