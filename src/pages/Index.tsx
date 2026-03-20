@@ -296,8 +296,8 @@ const dashboardTrips = useMemo(() => {
 const dashboardPayments = useMemo(() => payments, [payments]);
   
 // Calculate earnings for a single dredger
-const calculateDredgerEarnings = (dredgerId: string) => {
-  const relevantTrips = trips.filter(t => t.dredgerId === dredgerId);
+const calculateDredgerEarnings = (dredgerId: string, filteredTrips: Trip[], filteredPayments: Payment[]) => {
+  const relevantTrips = filteredTrips.filter(t => t.dredgerId === dredgerId);
   
   const totalVolume = relevantTrips.reduce((sum, t) => sum + (t.totalVolume || 0), 0);
   const totalAmount = relevantTrips.reduce((sum, t) => sum + (t.dredgerAmount || 0), 0);
@@ -493,11 +493,13 @@ try {
     setIsSaving(false);
   }
 };
+const [isSavingd, setIsSavingd] = useState(false);  // ← add this state
  const saveDredger = async () => {
   if (!dredgerForm.code || !dredgerForm.name) {
     alert("Please fill in Code and Name for the Dredger.");
     return;
   }
+  setIsSavingd(true);  // disable button
     const payload = {
     Code: dredgerForm.code.trim(),
     Name: dredgerForm.name.trim(),
@@ -518,6 +520,8 @@ try {
   } catch (err) {
     console.error("Save dredger failed:", err);
     alert("Failed to save dredger.");
+  }finally {
+    setIsSavingd(false);
   }
 };
 
