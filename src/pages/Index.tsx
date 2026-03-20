@@ -333,7 +333,45 @@ const calculateTransporterEarnings = (transporterId: string) => {
   };
 };
 
+const filteredTrips = useMemo(() => {
+  let result = trips;
 
+  // Apply date filter (from dateFilter state)
+  if (dateFilter.start) {
+    const startDate = new Date(dateFilter.start);
+    result = result.filter(t => {
+      const tripDate = new Date(toSortableISO(t.date));
+      return tripDate >= startDate;
+    });
+  }
+
+  if (dateFilter.end) {
+    const endDate = new Date(dateFilter.end);
+    result = result.filter(t => {
+      const tripDate = new Date(toSortableISO(t.date));
+      return tripDate <= endDate;
+    });
+  }
+
+  // Apply search term (plate, transporter name, dumping location)
+  if (searchTerm.trim()) {
+    const term = searchTerm.trim().toLowerCase();
+    result = result.filter(t => {
+      const transporter = transporters.find(tr => tr.id === t.transporterId);
+      const transporterName = transporter?.name?.toLowerCase() || "";
+      const plate = t.plateNumber?.toLowerCase() || "";
+      const location = t.dumpingLocation?.toLowerCase() || "";
+
+      return (
+        plate.includes(term) ||
+        transporterName.includes(term) ||
+        location.includes(term)
+      );
+    });
+  }
+
+  return result;
+}, [trips, dateFilter, searchTerm, transporters]);
 
 useEffect(() => {
     loadDataFromSheets();
