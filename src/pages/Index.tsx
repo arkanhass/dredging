@@ -618,31 +618,37 @@ try {
     "https://script.google.com/macros/s/AKfycbytcTFRquKWvg6ZnUf_HDbyNp0DOtA4cB7UWfOa577SKEMKkPi7nli_uslOpv3zUikV_g/exec";
 
   const submitToAppsScript = async (action: string, data: any, onSuccess: () => void, silent = false) => {
-    const payload = { action, data };
+  // Flatten the payload (no nested { action, data })
+  const payload = { action, ...data };
+
+  // Convert to URLSearchParams (form-urlencoded)
+  const formData = new URLSearchParams();
+  for (const key in payload) {
+    formData.append(key, String(payload[key]));  // convert everything to string
+  }
     try {
-      const response = await fetch(APPS_SCRIPT_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+    const response = await fetch(APPS_SCRIPT_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: formData.toString(),
+    });
 
-      if (!response.ok) {
-        console.error(`GAS HTTP error: ${response.status} ${response.statusText}`);
-        return;
-      }
-
-      const result = await response.json();
-      console.log("GAS response:", result);
-
-      if (result.success === false) {
-        console.error("GAS error:", result.error);
-        return;
-      }
-    } catch (error) {
-      console.error("Fetch error:", error);
+    if (!response.ok) {
+      console.error(`GAS HTTP error: ${response.status} ${response.statusText}`);
       return;
     }
 
+    const result = await response.json();
+    console.log("GAS response:", result);
+
+    if (result.success === false) {
+      console.error("GAS error:", result.error);
+      return;
+    }
+
+    // Success handling
     const refreshDelay = 3000;
     if (!silent) {
       setTimeout(async () => {
@@ -653,7 +659,11 @@ try {
       onSuccess();
       setTimeout(() => loadDataFromSheets(), refreshDelay);
     }
-  };
+  } catch (error) {
+    console.error("Fetch error:", error);
+  }
+};
+    
 const generateReference = () => {
   const yyyymmdd = new Date().toISOString().slice(0, 10).replace(/-/g, "");
   const rand = Math.random().toString(36).slice(2, 10).toUpperCase(); // 8 chars for safety
