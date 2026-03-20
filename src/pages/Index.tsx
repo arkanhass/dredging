@@ -266,6 +266,30 @@ const formatCurrency = (value: number | null | undefined): string => {
     maximumFractionDigits: 2,
   }).format(value);
 };
+const dashboardTrips = useMemo(() => {
+  let filtered = trips;
+
+  if (dashboardDateFilter.start) {
+    const startDate = new Date(dashboardDateFilter.start);
+    filtered = filtered.filter(t => {
+      const tripDate = new Date(toSortableISO(t.date));
+      return tripDate >= startDate;
+    });
+  }
+
+  if (dashboardDateFilter.end) {
+    const endDate = new Date(dashboardDateFilter.end);
+    filtered = filtered.filter(t => {
+      const tripDate = new Date(toSortableISO(t.date));
+      return tripDate <= endDate;
+    });
+  }
+
+  return filtered;
+}, [trips, dashboardDateFilter]);
+
+// Optional: If payments need date filtering too (currently not in your code)
+const dashboardPayments = useMemo(() => payments, [payments]);
   useEffect(() => {
     loadDataFromSheets();
   }, []);
