@@ -382,16 +382,16 @@ const openAddTruckModal = (transporterId: string) => {
   }
 
   // Get default CBM — use the first truck's capacity, or 0 if no trucks
-  const defaultCbm = transporter.trucks.length > 0 
-    ? transporter.trucks[0].capacityCbm 
-    : 0;
+  //const defaultCbm = transporter.trucks.length > 0 
+    //? transporter.trucks[0].capacityCbm 
+    //: 0;
 
   setTruckForm({
     transporterId,
     truckName: "",
     plateNumber: "",
-    transporterBillingCbm: defaultCbm,  // fixed/greyed out
-    dredgerBillingCbm: defaultCbm,      // editable, starts same as capacity
+    transporterBillingCbm: undefined,  // fixed/greyed out
+    dredgerBillingCbm: undefined,      // editable, starts same as capacity
     status: "active",
   });
 
