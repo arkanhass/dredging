@@ -256,6 +256,16 @@ const latestTripDisplay = useMemo(() => {
     totalPaid,
   };
 }, [trips, payments]);
+const formatCurrency = (value: number | null | undefined): string => {
+  if (value == null || isNaN(value)) return "₦0.00";
+
+  return new Intl.NumberFormat('en-NG', {
+    style: 'currency',
+    currency: 'NGN',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value);
+};
   useEffect(() => {
     loadDataFromSheets();
   }, []);
