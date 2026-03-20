@@ -748,7 +748,10 @@ const generateReference = () => {
 };
 
     const action = oldItem ? "updateTrip" : "saveTrip";
-
+console.log("=== SAVING TRIP DEBUG ===");
+console.log("tripData being sent to GAS:", JSON.stringify(tripData, null, 2));
+console.log("Capacity value (tripCbmVal):", tripCbmVal);
+console.log("Total Volume calculated:", totalTripsVolume);
     submitToAppsScript(action, tripData, () => {
       console.log(`Trip ${oldItem ? "updated" : "saved"} sent`);
     }, false);
