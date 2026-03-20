@@ -852,6 +852,38 @@ console.log("Total Volume calculated:", totalTripsVolume);
       console.log(`Trip ${oldItem ? "updated" : "saved"} sent`);
     }, false);
   };
+const [isSaving, setIsSaving] = useState(false);  // ← add this state
+  const saveTransporter = async () => {
+  if (!transporterForm.code || !transporterForm.name) {  // basic validation - adjust as needed
+    alert("Please fill in Code and Name for the Transporter.");
+    return;
+  }
+setIsSaving(true);  // disable button
+  const payload = {
+    Code: transporterForm.code.trim(),
+    Name: transporterForm.name.trim(),
+    RatePerCbm: transporterForm.ratePerCbm || 0,
+    Status: transporterForm.status || "active",
+    Contractor: transporterForm.contractor || "",
+    ContractNumber: transporterForm.contractNumber || "",
+    // If editing, include rowNumber for update in GAS
+    rowNumber: editingItem?.rowNumber,
+  };
+try {
+    await submitToAppsScript('saveTransporter', payload, () => {
+      console.log("Transporter saved");
+      setShowTransporterModal(false);
+      setTransporterForm({});
+      loadDataFromSheets();  // reload list
+    });
+  } catch (err) {
+    console.error("Save transporter failed:", err);
+    alert("Failed to save transporter. Check console.");
+  } finally {
+    setIsSaving(false);
+  }
+};
+ 
 
   // ... (keep all other functions unchanged: saveDredger, saveTransporter, savePayment, deleteItem, etc.)
 
@@ -1851,9 +1883,28 @@ console.log("Total Volume calculated:", totalTripsVolume);
               <div><label className="block text-sm font-medium text-gray-700">Status</label><select value={transporterForm.status || "active"} onChange={(e) => setTransporterForm({ ...transporterForm, status: e.target.value as "active" | "inactive" })} className="w-full px-3 py-2 border rounded-lg"><option value="active">Active</option><option value="inactive">Inactive</option></select></div>
             </div>
             <div className="flex justify-end space-x-2 mt-6">
-              <button type="button" onClick={() => { setShowTransporterModal(false); setEditingItem(null); setTransporterForm({}); }} className="px-4 py-2 border rounded-lg hover:bg-gray-50">Cancel</button>
-              <button type="button" onClick={() => saveTransporter()} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Save</button>
-            </div>
+  <button
+    type="button"
+    onClick={() => {
+      setShowTransporterModal(false);
+      setEditingItem(null);
+      setTransporterForm({});
+    }}
+    className="px-4 py-2 border rounded-lg hover:bg-gray-50 transition-colors"
+  >
+    Cancel
+  </button>
+  <button
+    type="button"
+    onClick={saveTransporter}  // ← no () here
+    disabled={isSaving}
+    className={`px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors ${
+      isSaving ? 'opacity-50 cursor-not-allowed' : ''
+    }`}
+  >
+    {isSaving ? 'Saving...' : editingItem ? 'Update' : 'Save'}
+  </button>
+</div>
           </div>
         </div>
       )}
