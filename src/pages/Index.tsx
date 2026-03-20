@@ -673,25 +673,29 @@ const totalVolume = tripsCount * tripCbm;  // always calculate since no TotalTri
       setTrips((prev) => [...prev, newTrip]);
     }
 
-    const tripData = {
-  Date: newTrip.date,
-  DredgerCode: dredger?.code || "",
-  TransporterCode: transporter?.code || "",
-  PlateNumber: truck?.plateNumber || "",
-  Trips: tripsCount,
-  DredgerRate: dredgerRate,
-  TransporterRate: transporterRate,
-  DumpingLocation: newTrip.dumpingLocation || "",
-  Notes: newTrip.notes || "",
-  DredgerAmount: dredgerAmount,
-  TransporterAmount: transporterAmount,
-  TripCBM: tripCbmVal,                     // standard per-trip CBM
-  ActualLoadedCbm: tripForm.actualLoadedCbm ?? "",  // ← send the override if filled
-  TotalTripsVolume: totalTripsVolume,         // ← add this
-  Reference: refToUse
-  // No TotalTripsVolume – it will be calculated on load
-  // If you want to keep Reference, add it here (but column is missing)
-};
+const refToUse = editingItem?.reference || generateReference(); // use your generateReference
+
+const tripDataArray = [
+  newTrip.date || "",
+  dredger?.code || "",
+  transporter?.code || "",
+  truck?.plateNumber || "",
+  tripsCount,
+  dredgerRate,
+  transporterRate,
+  newTrip.dumpingLocation || "",
+  newTrip.notes || "",
+  dredgerAmount,
+  transporterAmount,
+  tripCbmVal,                          // TripCBM – standard
+  tripForm.actualLoadedCbm ?? "",      // ActualLoadedCbm – override
+  totalTripsVolume,
+  refToUse                             // Reference – always sent
+];
+// Then send it as array
+submitToAppsScript(action, tripDataArray, () => {
+  console.log(`Trip ${oldItem ? 'updated' : 'saved'} in sheet`);
+}, false);
 
     const action = oldItem ? "updateTrip" : "saveTrip";
 
