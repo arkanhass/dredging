@@ -222,6 +222,10 @@ const latestTripDisplay = useMemo(() => {
     return latestDate ? formatDisplayDate(latestDate) : null;
   }, [trips]);
 
+const contractorOptions = useMemo(() => {
+  const set = new Set(transporters.map(t => t.contractor || 'Unassigned').filter(Boolean));
+  return Array.from(set);
+}, [transporters]);
 
   const overallStats = useMemo(() => {
   if (trips.length === 0) {
@@ -397,6 +401,7 @@ const openAddTruckModal = (transporterId: string) => {
 
   setShowAddTruckModal(true);
 };
+
 const handleAddTruckSubmit = () => {
   const { transporterId, truckName, plateNumber, transporterBillingCbm, dredgerBillingCbm, status } = truckForm;
 
@@ -457,7 +462,64 @@ const handleAddTruckSubmit = () => {
   setShowAddTruckModal(false);
   setTruckForm({ transporterId: "" });
 };
+const [isSaving, setIsSaving] = useState(false);  // ← add this state
+  const saveTransporter = async () => {
+  if (!transporterForm.code || !transporterForm.name) {  // basic validation - adjust as needed
+    alert("Please fill in Code and Name for the Transporter.");
+    return;
+  }
+setIsSaving(true);  // disable button
+  const payload = {
+    Code: transporterForm.code.trim(),
+    Name: transporterForm.name.trim(),
+    RatePerCbm: transporterForm.ratePerCbm || 0,
+    Status: transporterForm.status || "active",
+    Contractor: transporterForm.contractor || "",
+    ContractNumber: transporterForm.contractNumber || "",
+    // If editing, include rowNumber for update in GAS
+    rowNumber: editingItem?.rowNumber,
+  };
+try {
+    await submitToAppsScript('saveTransporter', payload, () => {
+      console.log("Transporter saved");
+      setShowTransporterModal(false);
+      setTransporterForm({});
+      loadDataFromSheets();  // reload list
+    });
+  } catch (err) {
+    console.error("Save transporter failed:", err);
+    alert("Failed to save transporter. Check console.");
+  } finally {
+    setIsSaving(false);
+  }
+};
+ const saveDredger = async () => {
+  if (!dredgerForm.code || !dredgerForm.name) {
+    alert("Please fill in Code and Name for the Dredger.");
+    return;
+  }
+    const payload = {
+    Code: dredgerForm.code.trim(),
+    Name: dredgerForm.name.trim(),
+    RatePerCbm: dredgerForm.ratePerCbm || 0,
+    Status: dredgerForm.status || "active",
+    Contractor: dredgerForm.contractor || "",
+    ContractNumber: dredgerForm.contractNumber || "",
+  };
 
+  try {
+    await submitToAppsScript('saveDredger', payload, () => {
+      console.log("Dredger saved successfully");
+      setShowDredgerModal(false);
+      setDredgerForm({});
+      setEditingItem(null);
+      loadDataFromSheets();
+    });
+  } catch (err) {
+    console.error("Save dredger failed:", err);
+    alert("Failed to save dredger.");
+  }
+};
 
 useEffect(() => {
     loadDataFromSheets();
@@ -852,41 +914,25 @@ console.log("Total Volume calculated:", totalTripsVolume);
       console.log(`Trip ${oldItem ? "updated" : "saved"} sent`);
     }, false);
   };
-const [isSaving, setIsSaving] = useState(false);  // ← add this state
-  const saveTransporter = async () => {
-  if (!transporterForm.code || !transporterForm.name) {  // basic validation - adjust as needed
-    alert("Please fill in Code and Name for the Transporter.");
-    return;
-  }
-setIsSaving(true);  // disable button
-  const payload = {
-    Code: transporterForm.code.trim(),
-    Name: transporterForm.name.trim(),
-    RatePerCbm: transporterForm.ratePerCbm || 0,
-    Status: transporterForm.status || "active",
-    Contractor: transporterForm.contractor || "",
-    ContractNumber: transporterForm.contractNumber || "",
-    // If editing, include rowNumber for update in GAS
-    rowNumber: editingItem?.rowNumber,
-  };
-try {
-    await submitToAppsScript('saveTransporter', payload, () => {
-      console.log("Transporter saved");
-      setShowTransporterModal(false);
-      setTransporterForm({});
-      loadDataFromSheets();  // reload list
-    });
-  } catch (err) {
-    console.error("Save transporter failed:", err);
-    alert("Failed to save transporter. Check console.");
-  } finally {
-    setIsSaving(false);
-  }
-};
- 
+
+
+
 
   // ... (keep all other functions unchanged: saveDredger, saveTransporter, savePayment, deleteItem, etc.)
+const deleteItem = async (type: 'dredger' | 'transporter' | 'trip' | 'payment', id: string) => {
+  if (!window.confirm(`Are you sure you want to delete this ${type}?`)) return;
 
+  try {
+    await submitToAppsScript('delete' + type.charAt(0).toUpperCase() + type.slice(1), { id }, () => {
+      loadDataFromSheets();
+    });
+  } catch (err) {
+    console.error(`Delete ${type} failed:`, err);
+  }
+};
+const sortedPayments = useMemo(() => {
+  return [...payments].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+}, [payments]);
   // Return JSX (unchanged)
   return (
     <div className="min-h-screen bg-gray-100">
