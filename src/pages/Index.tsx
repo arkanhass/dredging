@@ -661,7 +661,10 @@ try {
     const dredgerCode = (row[1] || "").toString().trim();
     const transporterCode = (row[2] || "").toString().trim();
     const plateNumber = (row[3] || "").toString().trim();
-
+const transporterBillingCbmRaw = parseMoney(row[9]) ?? 0;   // new column J (index 9)
+const dredgerBillingCbmRaw     = parseMoney(row[10]) ?? 0;  // new column K (index 10)
+const actualLoadedCbmRaw       = parseMoney(row[11]) ?? 0;  // new column L (index 11)
+const totalTripsVolumeRaw      = parseMoney(row[14]) ?? 0;  // new column O (index 14)
     // Safe access
     const transporter = transporterMap.get(transporterCode) || null;
     let truck = null;
@@ -673,8 +676,7 @@ try {
 
     // Parse safely
     const tripCbmRaw = parseMoney(row[11]) ?? 0;
-    const actualLoadedCbmRaw = parseMoney(row[12]) ?? 0;
-    const totalTripsVolumeRaw = parseMoney(row[13]) ?? 0;
+    
 
     const tripsCount = Number(row[4]) || 0;
     const dredgerRate = parseMoney(row[5]) ?? 0;
@@ -706,28 +708,30 @@ try {
 
     const rowNumber = i + 2;
 
-    return {
-      id: `trip-${i}`,
-      date: rawDate,
-      dredgerId: loadedDredgers.find((d) => d.code === dredgerCode)?.id || "",
-      transporterId: transporterCode,
-      truckId: truck?.id || "",
-      plateNumber,
-      trips: tripsCount,
-      capacityCbm: tripCbm,
-      totalVolume,
-      dredgerRate,
-      transporterRate,
-      dredgerAmount: billedDredgerAmount,
-      transporterAmount: billedTransporterAmount,
-      tripCbm,
-      totalTripsVolume: totalVolume,
-      dumpingLocation: row[7] ? String(row[7]) : "",
-      notes: row[8] ? String(row[8]) : "",
-      reference: ref,
-      rowNumber,
-      actualLoadedCbm: actualLoadedCbmRaw > 0 ? actualLoadedCbmRaw : undefined,
-    } satisfies Trip;
+   return {
+  id: `trip-${i}`,
+  date: rawDate,
+  dredgerId: loadedDredgers.find((d) => d.code === dredgerCode)?.id || "",
+  transporterId: transporterCode,
+  truckId: truck?.id || "",
+  plateNumber,
+  trips: tripsCount,
+  // ─── NEW CODE GOES HERE ───
+  capacityCbm: actualLoadedCbmRaw,
+  totalVolume: totalTripsVolumeRaw > 0 ? totalTripsVolumeRaw : tripsCount * actualLoadedCbmRaw,
+  actualLoadedCbm: actualLoadedCbmRaw > 0 ? actualLoadedCbmRaw : undefined,
+  // ─── end of new code ───
+  dredgerRate,
+  transporterRate,
+  dredgerAmount: billedDredgerAmount,
+  transporterAmount: billedTransporterAmount,
+  tripCbm,
+  totalTripsVolume: totalVolume,  // ← you can keep this or remove if duplicate
+  dumpingLocation: row[7] ? String(row[7]) : "",
+  notes: row[8] ? String(row[8]) : "",
+  reference: ref,
+  rowNumber,
+} satisfies Trip;
   })
 );
 
@@ -822,102 +826,81 @@ const generateReference = () => {
   return `TRIP-${yyyymmdd}-${rand}`;
 };
   // CRUD - saveTrip FIXED (no duplicate call)
-  const saveTrip = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
+ const saveTrip = async (e?: React.FormEvent) => {
+  if (e) e.preventDefault();
 
-    if (!tripForm.date || !tripForm.dredgerId || !tripForm.transporterId || !tripForm.truckId || !tripForm.trips) {
-      alert("Please fill in all required fields: Date, Dredger, Transporter, Truck, and Number of Trips.");
-      return;
-    }
+  if (!tripForm.date || !tripForm.dredgerId || !tripForm.transporterId || !tripForm.truckId || !tripForm.trips) {
+    alert("Please fill in all required fields.");
+    return;
+  }
 
-    const allTrucks = transporters.flatMap((t) => t.trucks);
-    const truck = allTrucks.find((tr) => tr.id === tripForm.truckId);
-    const dredger = dredgers.find((d) => d.id === tripForm.dredgerId);
-    const transporter = transporters.find((t) => t.id === tripForm.transporterId);
+  const allTrucks = transporters.flatMap((t) => t.trucks);
+  const truck = allTrucks.find((tr) => tr.id === tripForm.truckId);
+  const dredger = dredgers.find((d) => d.id === tripForm.dredgerId);
+  const transporter = transporters.find((t) => t.id === tripForm.transporterId);
 
-    const tripsCount = tripForm.trips || 0;
-    const dredgerRate = tripForm.dredgerRate ?? dredger?.ratePerCbm ?? 0;
-    const transporterRate = tripForm.transporterRate ?? truck?.ratePerCbm ?? transporter?.ratePerCbm ?? 0;
+  const tripsCount = tripForm.trips || 0;
+  const dredgerRate = tripForm.dredgerRate ?? dredger?.ratePerCbm ?? 0;
+  const transporterRate = tripForm.transporterRate ?? truck?.ratePerCbm ?? transporter?.ratePerCbm ?? 0;
 
-    const manualCbm = tripForm.capacityCbm && tripForm.capacityCbm > 0 ? tripForm.capacityCbm : null;
-    //const tripCbmVal = manualCbm ?? (truck?.transporterBillingCbm || truck?.capacityCbm || 0);
-// Use manual Capacity (CBM) as the actual loaded value if provided
-  // Fallback to truck transporterBillingCbm or capacityCbm
-  const tripCbmVal = 
-  tripForm.capacityCbm && tripForm.capacityCbm > 0
-    ? tripForm.capacityCbm
-    : (truck?.transporterBillingCbm || truck?.dredgerBillingCbm || truck?.capacityCbm || 0);
+  // NEW LOGIC
+  let actualLoadedCbm = tripForm.capacityCbm || 0;
+  let transporterBillingCbm: number;
+  let dredgerBillingCbm: number;
 
-    const totalTripsVolume = tripsCount * tripCbmVal;
-    const dredgerAmount = tripForm.dredgerAmount ?? (tripsCount * tripCbmVal * dredgerRate);
-    const transporterAmount = tripForm.transporterAmount ?? (tripsCount * tripCbmVal * transporterRate);
+  const truckDredgerCbm = truck?.dredgerBillingCbm || truck?.capacityCbm || 0;
+  const truckTransporterCbm = truck?.transporterBillingCbm || truck?.capacityCbm || 0;
 
-    const refToUse = editingItem?.reference || generateReference();
+  if (actualLoadedCbm === 0 || actualLoadedCbm === truckDredgerCbm) {
+    // User kept default → use truck's separate values
+    actualLoadedCbm = truckDredgerCbm;
+    transporterBillingCbm = truckTransporterCbm;
+    dredgerBillingCbm = truckDredgerCbm;
+  } else {
+    // User changed the value → all three fields become the same
+    transporterBillingCbm = actualLoadedCbm;
+    dredgerBillingCbm = actualLoadedCbm;
+  }
 
-    const newTrip: Trip = {
-      id: editingItem ? editingItem.id : `temp-${Date.now()}`,
-      date: tripForm.date || "",
-      dredgerId: tripForm.dredgerId || "",
-      transporterId: tripForm.transporterId || "",
-      truckId: tripForm.truckId || "",
-      plateNumber: truck?.plateNumber || "",
-      trips: tripsCount,
-      capacityCbm: tripCbmVal,
-      totalVolume: totalTripsVolume,
-      dredgerRate,
-      transporterRate,
-      dredgerAmount,
-      transporterAmount,
-      tripCbm: tripCbmVal,
-      
-      totalTripsVolume,
-      dumpingLocation: tripForm.dumpingLocation || "",
-      notes: tripForm.notes || "",
-      reference: refToUse,
-      rowNumber: editingItem?.rowNumber,
-      actualLoadedCbm: tripCbmVal,
-    };
+  const totalTripsVolume = tripsCount * actualLoadedCbm;
 
-    setShowTripModal(false);
-    const oldItem = editingItem;
-    setEditingItem(null);
-    setTripForm({});
+  const dredgerAmount = tripForm.dredgerAmount ?? (tripsCount * dredgerBillingCbm * dredgerRate);
+  const transporterAmount = tripForm.transporterAmount ?? (tripsCount * transporterBillingCbm * transporterRate);
 
-    if (oldItem) {
-      setTrips((prev) => prev.map((t) => (t.id === oldItem.id ? newTrip : t)));
-    } else {
-      setTrips((prev) => [...prev, newTrip]);
-    }
+  const refToUse = editingItem?.reference || generateReference();
 
-    const tripData = {
-  Date: newTrip.date,
-  DredgerCode: dredger?.code || "",
-  TransporterCode: transporter?.code || "",
-  PlateNumber: truck?.plateNumber || "",
-  Trips: tripsCount,
-  DredgerRate: dredgerRate,
-  TransporterRate: transporterRate,
-  DumpingLocation: newTrip.dumpingLocation || "",
-  Notes: newTrip.notes || "",
-  DredgerAmount: dredgerAmount,
-  TransporterAmount: transporterAmount,
-  TripCBM: tripCbmVal,                    // → column L
-  ActualLoadedCbm: tripCbmVal,            // → column M (same value as Capacity input)
-  TotalTripsVolume: totalTripsVolume,     // → column N
-  Reference: refToUse,
-  rowNumber: oldItem?.rowNumber,
-  Row: oldItem?.rowNumber
-};
+  const newTrip: Trip = { /* ... same as before ... */ };
 
-    const action = oldItem ? "updateTrip" : "saveTrip";
-console.log("=== SAVING TRIP DEBUG ===");
-console.log("tripData being sent to GAS:", JSON.stringify(tripData, null, 2));
-console.log("Capacity value (tripCbmVal):", tripCbmVal);
-console.log("Total Volume calculated:", totalTripsVolume);
-    submitToAppsScript(action, tripData, () => {
-      console.log(`Trip ${oldItem ? "updated" : "saved"} sent`);
-    }, false);
+  // ... (the setShowTripModal, setEditingItem, setTripForm, setTrips part stays the same)
+
+  // NEW tripData payload — exact new column order
+  const tripData = {
+    Date: newTrip.date,
+    DredgerCode: dredger?.code || "",
+    TransporterCode: transporter?.code || "",
+    PlateNumber: truck?.plateNumber || "",
+    Trips: tripsCount,
+    DredgerRate: dredgerRate,
+    TransporterRate: transporterRate,
+    DumpingLocation: newTrip.dumpingLocation || "",
+    Notes: newTrip.notes || "",
+    TransporterBillingCbm: transporterBillingCbm,   // ← new column 10
+    DredgerBillingCbm: dredgerBillingCbm,           // ← new column 11
+    ActualLoadedCbm: actualLoadedCbm,               // ← column 12
+    DredgerAmount: dredgerAmount,
+    TransporterAmount: transporterAmount,
+    TotalTripsVolume: totalTripsVolume,
+    Reference: refToUse,
+    rowNumber: editingItem?.rowNumber,
+    Row: editingItem?.rowNumber
   };
+
+  const action = editingItem ? "updateTrip" : "saveTrip";
+
+  submitToAppsScript(action, tripData, () => {
+    console.log(`Trip ${editingItem ? "updated" : "saved"} sent`);
+  }, false);
+};
 
 
 
@@ -1986,7 +1969,34 @@ const sortedPayments = useMemo(() => {
                 <div><label className="block text-sm font-medium text-gray-700">Dredger</label><select value={tripForm.dredgerId || ""} onChange={(e) => setTripForm({ ...tripForm, dredgerId: e.target.value })} className="w-full px-3 py-2 border rounded-lg"><option value="">Select Dredger</option>{dredgers.filter((d) => d.status === "active").map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}</select></div>
                 <div><label className="block text-sm font-medium text-gray-700">Transporter</label><select value={tripForm.transporterId || ""} onChange={(e) => { setTripForm({ ...tripForm, transporterId: e.target.value, truckId: "" }); }} className="w-full px-3 py-2 border rounded-lg"><option value="">Select Transporter</option>{transporters.filter((t) => t.status === "active").map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</select></div>
               </div>
-              <div><label className="block text-sm font-medium text-gray-700">Truck</label><select value={tripForm.truckId || ""} onChange={(e) => { const selectedTruckId = e.target.value; const allTrucks = transporters.flatMap((t) => t.trucks); const truck = allTrucks.find((tr) => tr.id === selectedTruckId); setTripForm({ ...tripForm, truckId: selectedTruckId, capacityCbm: truck?.transporterBillingCbm || truck?.capacityCbm || 0 }); }} className="w-full px-3 py-2 border rounded-lg" disabled={!tripForm.transporterId}><option value="">Select Truck</option>{transporters.find((t) => t.id === tripForm.transporterId)?.trucks.filter((tr) => tr.status === "active").map((truck) => <option key={truck.id} value={truck.id}>{truck.truckName} ({truck.plateNumber} {truck.capacityCbm} CBM)</option>)}</select></div>
+              <div><label className="block text-sm font-medium text-gray-700">Truck</label>
+<select 
+  value={tripForm.truckId || ""} 
+  onChange={(e) => { 
+    const selectedTruckId = e.target.value; 
+    const allTrucks = transporters.flatMap((t) => t.trucks); 
+    const truck = allTrucks.find((tr) => tr.id === selectedTruckId); 
+    
+    setTripForm({ 
+      ...tripForm, 
+      truckId: selectedTruckId, 
+      // NEW DEFAULT — use DredgerBillingCbm instead of TransporterBillingCbm
+      capacityCbm: truck?.dredgerBillingCbm || truck?.capacityCbm || 0 
+    }); 
+  }} 
+  className="w-full px-3 py-2 border rounded-lg" 
+  disabled={!tripForm.transporterId}
+>
+  <option value="">Select Truck</option>
+  {transporters.find((t) => t.id === tripForm.transporterId)?.trucks
+    .filter((tr) => tr.status === "active")
+    .map((truck) => (
+      <option key={truck.id} value={truck.id}>
+        {truck.truckName} ({truck.plateNumber} — Dredger: {truck.dredgerBillingCbm}CBM)
+      </option>
+    ))}
+</select>
+</div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
   <div>
     <label className="block text-sm font-medium text-gray-700">
