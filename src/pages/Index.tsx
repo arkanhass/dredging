@@ -687,6 +687,8 @@ const totalVolume = tripsCount * tripCbm;  // always calculate since no TotalTri
   TransporterAmount: transporterAmount,
   TripCBM: tripCbmVal,                     // standard per-trip CBM
   ActualLoadedCbm: tripForm.actualLoadedCbm ?? "",  // ← send the override if filled
+  TotalTripsVolume: totalTripsVolume,         // ← add this
+  Reference: refToUse
   // No TotalTripsVolume – it will be calculated on load
   // If you want to keep Reference, add it here (but column is missing)
 };
