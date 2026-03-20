@@ -870,12 +870,19 @@ const generateReference = () => {
   const refToUse = editingItem?.reference || generateReference();
 
   const newTrip: Trip = { /* ... same as before ... */ };
-
+// Immediately update UI & close modal (optimistic)
+  setShowTripModal(false);
+  setEditingItem(null);
+  setTripForm({});
   // ... (the setShowTripModal, setEditingItem, setTripForm, setTrips part stays the same)
-
+if (oldItem) {
+    setTrips((prev) => prev.map((t) => (t.id === oldItem.id ? newTrip : t)));
+  } else {
+    setTrips((prev) => [...prev, newTrip]);
+  }
   // NEW tripData payload — exact new column order
   const tripData = {
-    Date: newTrip.date,
+    Date: formatDisplayDate(newTrip.date),
     DredgerCode: dredger?.code || "",
     TransporterCode: transporter?.code || "",
     PlateNumber: truck?.plateNumber || "",
