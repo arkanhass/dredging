@@ -237,6 +237,8 @@ const DredgingDashboard: React.FC = () => {
   // Keep your existing modals and forms, just update the onClick handlers to use handleSave
 
   return (
+    <>
+      {/* ←←←←← Add the debug block here, at the very top of the return */}
     {process.env.NODE_ENV === 'development' && (
   <div className="bg-yellow-100 p-4 mb-6 rounded border border-yellow-300">
     <h3 className="font-bold mb-2">Debug: Raw API Data</h3>
@@ -412,6 +414,7 @@ const DredgingDashboard: React.FC = () => {
         <Plus className="w-7 h-7" />
       </button>
     </div>
+    </>
   );
 };
 
