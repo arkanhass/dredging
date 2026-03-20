@@ -221,6 +221,41 @@ const latestTripDisplay = useMemo(() => {
     const latestDate = sortedTrips[0]?.date;
     return latestDate ? formatDisplayDate(latestDate) : null;
   }, [trips]);
+
+
+  const overallStats = useMemo(() => {
+  if (trips.length === 0) {
+    return {
+      totalVolume: 0,
+      totalTrips: 0,
+      totalDredgerCost: 0,
+      totalTransporterCost: 0,
+      totalPaid: 0,
+    };
+  }
+
+  let totalVolume = 0;
+  let totalTrips = 0;
+  let totalDredgerCost = 0;
+  let totalTransporterCost = 0;
+
+  trips.forEach((trip) => {
+    totalVolume += trip.totalVolume || 0;
+    totalTrips += trip.trips || 0;
+    totalDredgerCost += trip.dredgerAmount || 0;
+    totalTransporterCost += trip.transporterAmount || 0;
+  });
+
+  const totalPaid = payments.reduce((sum, p) => sum + (p.amount || 0), 0);
+
+  return {
+    totalVolume,
+    totalTrips,
+    totalDredgerCost,
+    totalTransporterCost,
+    totalPaid,
+  };
+}, [trips, payments]);
   useEffect(() => {
     loadDataFromSheets();
   }, []);
