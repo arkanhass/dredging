@@ -397,7 +397,59 @@ const openAddTruckModal = (transporterId: string) => {
 
   setShowAddTruckModal(true);
 };
+const handleAddTruckSubmit = () => {
+  const { transporterId, truckName, plateNumber, transporterBillingCbm, dredgerBillingCbm, status } = truckForm;
 
+  if (!transporterId || !plateNumber) {
+    alert("Please fill in Transporter, Plate Number, and other required fields.");
+    return;
+  }
+
+  // Find the transporter
+  const transporterIndex = transporters.findIndex(t => t.id === transporterId);
+  if (transporterIndex === -1) {
+    alert("Transporter not found.");
+    return;
+  }
+
+  const newTruck: TruckRecord = {
+    id: `${transporterId}-${plateNumber.trim().toUpperCase()}`,
+    plateNumber: plateNumber.trim(),
+    truckName: truckName?.trim() || "Unnamed",
+    capacityCbm: transporterBillingCbm || dredgerBillingCbm || 0, // fallback
+    transporterId,
+    status: status || "active",
+    transporterBillingCbm: transporterBillingCbm || 0,
+    dredgerBillingCbm: dredgerBillingCbm || 0,
+    ratePerCbm: transporters[transporterIndex].ratePerCbm || 0, // inherit from transporter if needed
+  };
+
+  // Update transporters state (immutable update)
+  setTransporters(prev => {
+    const updated = [...prev];
+    updated[transporterIndex] = {
+      ...updated[transporterIndex],
+      trucks: [...updated[transporterIndex].trucks, newTruck],
+    };
+    return updated;
+  });
+
+  // Optional: Send to GAS (if you want to save to sheet immediately)
+  // submitToAppsScript('addTruck', {
+  //   Code: transporters[transporterIndex].code,
+  //   PlateNumber: newTruck.plateNumber,
+  //   TruckName: newTruck.truckName,
+  //   TransporterBillingCbm: newTruck.transporterBillingCbm,
+  //   DredgerBillingCbm: newTruck.dredgerBillingCbm,
+  //   Status: newTruck.status,
+  // }, () => {
+  //   console.log("Truck added to GAS");
+  // });
+
+  // Close modal & reset form
+  setShowAddTruckModal(false);
+  setTruckForm({ transporterId: "" });
+};
 
 
 useEffect(() => {
