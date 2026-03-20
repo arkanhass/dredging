@@ -520,35 +520,35 @@ const totalVolume = tripsCount * tripCbm;  // always calculate since no TotalTri
     "https://script.google.com/macros/s/AKfycbytcTFRquKWvg6ZnUf_HDbyNp0DOtA4cB7UWfOa577SKEMKkPi7nli_uslOpv3zUikV_g/exec";
 
   const submitToAppsScript = async (action: string, data: any, onSuccess: () => void, silent = false) => {
-    const payload = { action, data };
-
-    const send = async () => {
-      try {
-        await fetch(APPS_SCRIPT_URL, {
-          method: "POST",
-          mode: "no-cors",
-          headers: { "Content-Type": "text/plain" },
-          body: JSON.stringify(payload),
-        });
-      } catch (error) {
-        console.warn("Fetch error (likely CORS false positive):", error);
-      }
-    };
-
-    await send();
-
-    const refreshDelay = 5000;
-
-    if (!silent) {
-      setTimeout(async () => {
-        await loadDataFromSheets();
-        onSuccess();
-      }, refreshDelay);
-    } else {
-      onSuccess();
-      setTimeout(() => loadDataFromSheets(), refreshDelay);
+  const payload = { action, data };
+  try {
+    const response = await fetch(APPS_SCRIPT_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+      console.error(`Server error: ${response.status}`);
+      return;
     }
-  };
+    const result = await response.json();
+    console.log("GAS response:", result);
+  } catch (error) {
+    console.error("Fetch failed:", error);
+    return;
+  }
+
+  const refreshDelay = 3000;
+  if (!silent) {
+    setTimeout(async () => {
+      await loadDataFromSheets();
+      onSuccess();
+    }, refreshDelay);
+  } else {
+    onSuccess();
+    setTimeout(() => loadDataFromSheets(), refreshDelay);
+  }
+};
 
   // CRUD Operations
   const saveDredger = async (e?: React.FormEvent) => {
@@ -614,100 +614,90 @@ const totalVolume = tripsCount * tripCbm;  // always calculate since no TotalTri
   };
 
   const saveTrip = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
+  if (e) e.preventDefault();
 
-    if (!tripForm.date || !tripForm.dredgerId || !tripForm.transporterId || !tripForm.truckId || !tripForm.trips) {
-      alert("Please fill in all required fields: Date, Dredger, Transporter, Truck, and Number of Trips.");
-      return;
-    }
+  if (!tripForm.date || !tripForm.dredgerId || !tripForm.transporterId || !tripForm.truckId || !tripForm.trips) {
+    alert("Please fill in all required fields: Date, Dredger, Transporter, Truck, and Number of Trips.");
+    return;
+  }
 
-    const allTrucks = transporters.flatMap((t) => t.trucks);
-    const truck = allTrucks.find((tr) => tr.id === tripForm.truckId);
-    const dredger = dredgers.find((d) => d.id === tripForm.dredgerId);
-    const transporter = transporters.find((t) => t.id === tripForm.transporterId);
+  const allTrucks = transporters.flatMap((t) => t.trucks);
+  const truck = allTrucks.find((tr) => tr.id === tripForm.truckId);
+  const dredger = dredgers.find((d) => d.id === tripForm.dredgerId);
+  const transporter = transporters.find((t) => t.id === tripForm.transporterId);
 
-    const tripsCount = tripForm.trips || 0;
-    const dredgerRate = tripForm.dredgerRate ?? dredger?.ratePerCbm ?? 0;
-    const transporterRate = tripForm.transporterRate ?? truck?.ratePerCbm ?? transporter?.ratePerCbm ?? 0;
+  const tripsCount = tripForm.trips || 0;
+  const dredgerRate = tripForm.dredgerRate ?? dredger?.ratePerCbm ?? 0;
+  const transporterRate = tripForm.transporterRate ?? truck?.ratePerCbm ?? transporter?.ratePerCbm ?? 0;
 
-    const manualCbm = tripForm.capacityCbm && tripForm.capacityCbm > 0 ? tripForm.capacityCbm : null;
+  const manualCbm = tripForm.capacityCbm && tripForm.capacityCbm > 0 ? tripForm.capacityCbm : null;
+  const tripCbmVal = manualCbm ?? (truck?.transporterBillingCbm || truck?.capacityCbm || 0);
 
-    const tripCbmVal = manualCbm ?? (truck?.transporterBillingCbm || truck?.capacityCbm || 0);
-    const totalTripsVolume = tripsCount * tripCbmVal;
+  const totalTripsVolume = tripsCount * tripCbmVal;
+  const dredgerAmount = tripForm.dredgerAmount ?? (tripsCount * tripCbmVal * dredgerRate);
+  const transporterAmount = tripForm.transporterAmount ?? (tripsCount * tripCbmVal * transporterRate);
 
-    const dredgerAmount = tripForm.dredgerAmount ?? (tripsCount * tripCbmVal * dredgerRate);
-    const transporterAmount = tripForm.transporterAmount ?? (tripsCount * tripCbmVal * transporterRate);
+  const refToUse = editingItem?.reference || generateReference();
 
-    const generateReference = () => {
-  const yyyymmdd = new Date().toISOString().slice(0, 10).replace(/-/g, ""); // e.g. 20260320
-  const rand = Math.random().toString(36).slice(2, 10).toUpperCase();     // 8 chars = much safer
-  return `TRIP-${yyyymmdd}-${rand}`;
-};
-const refToUse = editingItem?.reference || generateReference(); // use your generateReference
-
-    const newTrip: Trip = {
-      id: editingItem ? editingItem.id : `temp-${Date.now()}`,
-      date: tripForm.date || "",
-      dredgerId: tripForm.dredgerId || "",
-      transporterId: tripForm.transporterId || "",
-      truckId: tripForm.truckId || "",
-      plateNumber: truck?.plateNumber || "",
-      trips: tripsCount,
-      capacityCbm: tripCbmVal,
-      totalVolume: totalTripsVolume,
-      dredgerRate,
-      transporterRate,
-      dredgerAmount,
-      transporterAmount,
-      tripCbm: tripCbmVal,
-      totalTripsVolume: totalTripsVolume,
-      dumpingLocation: tripForm.dumpingLocation || "",
-      notes: tripForm.notes || "",
-      reference: refToUse,
-    };
-
-    setShowTripModal(false);
-    const editingId = editingItem?.id;
-    const oldItem = editingItem;
-    setEditingItem(null);
-    setTripForm({});
-
-    if (editingId) {
-      setTrips((prev) => prev.map((t) => (t.id === editingId ? newTrip : t)));
-    } else {
-      setTrips((prev) => [...prev, newTrip]);
-    }
-
-
-
-const tripDataArray = [
-  newTrip.date || "",
-  dredger?.code || "",
-  transporter?.code || "",
-  truck?.plateNumber || "",
-  tripsCount,
-  dredgerRate,
-  transporterRate,
-  newTrip.dumpingLocation || "",
-  newTrip.notes || "",
-  dredgerAmount,
-  transporterAmount,
-  tripCbmVal,                          // TripCBM – standard
-  tripForm.actualLoadedCbm ?? "",      // ActualLoadedCbm – override
-  totalTripsVolume,
-  refToUse                             // Reference – always sent
-];
-// Then send it as array
-submitToAppsScript(action, tripDataArray, () => {
-  console.log(`Trip ${oldItem ? 'updated' : 'saved'} in sheet`);
-}, false);
-
-    const action = oldItem ? "updateTrip" : "saveTrip";
-
-    submitToAppsScript(action, tripData, () => {
-      console.log(`Trip ${oldItem ? 'updated' : 'saved'} in sheet`);
-    }, false);
+  const newTrip: Trip = {
+    id: editingItem ? editingItem.id : `temp-${Date.now()}`,
+    date: tripForm.date || "",
+    dredgerId: tripForm.dredgerId || "",
+    transporterId: tripForm.transporterId || "",
+    truckId: tripForm.truckId || "",
+    plateNumber: truck?.plateNumber || "",
+    trips: tripsCount,
+    capacityCbm: tripCbmVal,
+    totalVolume: totalTripsVolume,
+    dredgerRate,
+    transporterRate,
+    dredgerAmount,
+    transporterAmount,
+    tripCbm: tripCbmVal,
+    totalTripsVolume: totalTripsVolume,
+    dumpingLocation: tripForm.dumpingLocation || "",
+    notes: tripForm.notes || "",
+    reference: refToUse,
+    rowNumber: editingItem?.rowNumber,
   };
+
+  setShowTripModal(false);
+  const oldItem = editingItem;
+  setEditingItem(null);
+  setTripForm({});
+
+  if (editingItem) {
+    setTrips((prev) => prev.map((t) => (t.id === editingItem.id ? newTrip : t)));
+  } else {
+    setTrips((prev) => [...prev, newTrip]);
+  }
+
+  const tripData = {
+    Date: newTrip.date,
+    DredgerCode: dredger?.code || "",
+    TransporterCode: transporter?.code || "",
+    PlateNumber: truck?.plateNumber || "",
+    Trips: tripsCount,
+    DredgerRate: dredgerRate,
+    TransporterRate: transporterRate,
+    DumpingLocation: newTrip.dumpingLocation || "",
+    Notes: newTrip.notes || "",
+    DredgerAmount: dredgerAmount,
+    TransporterAmount: transporterAmount,
+    TripCBM: tripCbmVal,
+    ActualLoadedCbm: tripForm.actualLoadedCbm ?? "",
+    TotalTripsVolume: totalTripsVolume,
+    Reference: refToUse,
+    rowNumber: oldItem?.rowNumber,  // for backward compatibility if GAS still uses it
+    Row: oldItem?.rowNumber
+  };
+
+  const action = oldItem ? "updateTrip" : "saveTrip";
+
+  submitToAppsScript(action, tripData, () => {
+    console.log(`Trip ${oldItem ? 'updated' : 'saved'} sent`);
+  }, false);
+};
 
   const savePayment = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
