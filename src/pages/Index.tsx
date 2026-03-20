@@ -1941,7 +1941,7 @@ console.log("Total Volume calculated:", totalTripsVolume);
           />
         </div>
 
-        {/* New fields: both default to truck capacity */}
+        {/* Both CBM fields: editable, default to truck capacity */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700">
@@ -1951,9 +1951,9 @@ console.log("Total Volume calculated:", totalTripsVolume);
               type="number"
               step="0.01"
               value={truckForm.transporterBillingCbm ?? ""}
-              disabled  // ← greyed out & non-editable
-              className="w-full px-3 py-2 border rounded-lg bg-gray-100 text-gray-600 cursor-not-allowed"
-              placeholder="Same as truck capacity (fixed)"
+              onChange={(e) => setTruckForm({ ...truckForm, transporterBillingCbm: parseFloat(e.target.value) || undefined })}
+              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+              placeholder="Billing capacity for transporter (default from truck)"
             />
           </div>
           <div>
@@ -1966,7 +1966,7 @@ console.log("Total Volume calculated:", totalTripsVolume);
               value={truckForm.dredgerBillingCbm ?? ""}
               onChange={(e) => setTruckForm({ ...truckForm, dredgerBillingCbm: parseFloat(e.target.value) || undefined })}
               className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-              placeholder="Edit if different from truck capacity"
+              placeholder="Billing capacity for dredger (editable)"
             />
           </div>
         </div>
