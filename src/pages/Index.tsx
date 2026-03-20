@@ -843,7 +843,7 @@ const generateReference = () => {
   const dredgerRate = tripForm.dredgerRate ?? dredger?.ratePerCbm ?? 0;
   const transporterRate = tripForm.transporterRate ?? truck?.ratePerCbm ?? transporter?.ratePerCbm ?? 0;
 
-  // NEW LOGIC
+  // NEW LOGIC for billing CBMs
   let actualLoadedCbm = tripForm.capacityCbm || 0;
   let transporterBillingCbm: number;
   let dredgerBillingCbm: number;
@@ -852,12 +852,10 @@ const generateReference = () => {
   const truckTransporterCbm = truck?.transporterBillingCbm || truck?.capacityCbm || 0;
 
   if (actualLoadedCbm === 0 || actualLoadedCbm === truckDredgerCbm) {
-    // User kept default → use truck's separate values
     actualLoadedCbm = truckDredgerCbm;
     transporterBillingCbm = truckTransporterCbm;
     dredgerBillingCbm = truckDredgerCbm;
   } else {
-    // User changed the value → all three fields become the same
     transporterBillingCbm = actualLoadedCbm;
     dredgerBillingCbm = actualLoadedCbm;
   }
@@ -869,18 +867,45 @@ const generateReference = () => {
 
   const refToUse = editingItem?.reference || generateReference();
 
-  const newTrip: Trip = { /* ... same as before ... */ };
-// Immediately update UI & close modal (optimistic)
+  const newTrip: Trip = {
+    id: editingItem ? editingItem.id : `temp-${Date.now()}`,
+    date: tripForm.date || "",
+    dredgerId: tripForm.dredgerId || "",
+    transporterId: tripForm.transporterId || "",
+    truckId: tripForm.truckId || "",
+    plateNumber: truck?.plateNumber || "",
+    trips: tripsCount,
+    capacityCbm: actualLoadedCbm,
+    totalVolume: totalTripsVolume,
+    dredgerRate,
+    transporterRate,
+    dredgerAmount,
+    transporterAmount,
+    tripCbm: actualLoadedCbm,
+    totalTripsVolume,
+    dumpingLocation: tripForm.dumpingLocation || "",
+    notes: tripForm.notes || "",
+    reference: refToUse,
+    rowNumber: editingItem?.rowNumber,
+    actualLoadedCbm,
+  };
+
+  // Capture state before clearing
+  const wasEditing = !!editingItem;
+  const oldItemId = editingItem?.id;
+
+  // Optimistic UI update
   setShowTripModal(false);
   setEditingItem(null);
   setTripForm({});
-  // ... (the setShowTripModal, setEditingItem, setTripForm, setTrips part stays the same)
-if (oldItem) {
-    setTrips((prev) => prev.map((t) => (t.id === oldItem.id ? newTrip : t)));
+
+  if (wasEditing) {
+    setTrips((prev) => prev.map((t) => (t.id === oldItemId ? newTrip : t)));
   } else {
     setTrips((prev) => [...prev, newTrip]);
   }
-  // NEW tripData payload — exact new column order
+
+  // Prepare data for GAS
   const tripData = {
     Date: formatDisplayDate(newTrip.date),
     DredgerCode: dredger?.code || "",
@@ -891,9 +916,9 @@ if (oldItem) {
     TransporterRate: transporterRate,
     DumpingLocation: newTrip.dumpingLocation || "",
     Notes: newTrip.notes || "",
-    TransporterBillingCbm: transporterBillingCbm,   // ← new column 10
-    DredgerBillingCbm: dredgerBillingCbm,           // ← new column 11
-    ActualLoadedCbm: actualLoadedCbm,               // ← column 12
+    TransporterBillingCbm: transporterBillingCbm,
+    DredgerBillingCbm: dredgerBillingCbm,
+    ActualLoadedCbm: actualLoadedCbm,
     DredgerAmount: dredgerAmount,
     TransporterAmount: transporterAmount,
     TotalTripsVolume: totalTripsVolume,
@@ -902,14 +927,21 @@ if (oldItem) {
     Row: editingItem?.rowNumber
   };
 
-  const action = editingItem ? "updateTrip" : "saveTrip";
+  const action = wasEditing ? "updateTrip" : "saveTrip";
 
+  console.log("=== SAVING TRIP DEBUG ===");
+  console.log("tripData being sent to GAS:", JSON.stringify(tripData, null, 2));
+  console.log("Capacity value (actualLoadedCbm):", actualLoadedCbm);
+  console.log("Total Volume calculated:", totalTripsVolume);
+
+  // Background save
   submitToAppsScript(action, tripData, () => {
-    console.log(`Trip ${editingItem ? "updated" : "saved"} sent`);
-  }, false);
+  console.log(`Trip ${wasEditing ? "updated" : "saved"} sent to GAS`);
+}, true).catch(err => {
+  console.error("GAS save failed:", err);
+  alert("Trip added to UI but failed to save to Google Sheet. Please refresh.");
+});
 };
-
-
 
 
   // ... (keep all other functions unchanged: saveDredger, saveTransporter, savePayment, deleteItem, etc.)
