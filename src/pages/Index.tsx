@@ -373,6 +373,33 @@ const filteredTrips = useMemo(() => {
   return result;
 }, [trips, dateFilter, searchTerm, transporters]);
 
+
+const openAddTruckModal = (transporterId: string) => {
+  const transporter = transporters.find(t => t.id === transporterId);
+  if (!transporter) {
+    alert("Transporter not found");
+    return;
+  }
+
+  // Get default CBM — use the first truck's capacity, or 0 if no trucks
+  const defaultCbm = transporter.trucks.length > 0 
+    ? transporter.trucks[0].capacityCbm 
+    : 0;
+
+  setTruckForm({
+    transporterId,
+    truckName: "",
+    plateNumber: "",
+    transporterBillingCbm: defaultCbm,  // fixed/greyed out
+    dredgerBillingCbm: defaultCbm,      // editable, starts same as capacity
+    status: "active",
+  });
+
+  setShowAddTruckModal(true);
+};
+
+
+
 useEffect(() => {
     loadDataFromSheets();
   }, []);
