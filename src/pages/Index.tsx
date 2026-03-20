@@ -434,17 +434,19 @@ const handleAddTruckSubmit = () => {
     return updated;
   });
 
-  // Optional: Send to GAS (if you want to save to sheet immediately)
-  // submitToAppsScript('addTruck', {
-  //   Code: transporters[transporterIndex].code,
-  //   PlateNumber: newTruck.plateNumber,
-  //   TruckName: newTruck.truckName,
-  //   TransporterBillingCbm: newTruck.transporterBillingCbm,
-  //   DredgerBillingCbm: newTruck.dredgerBillingCbm,
-  //   Status: newTruck.status,
-  // }, () => {
-  //   console.log("Truck added to GAS");
-  // });
+  // Save to GAS (this is what was missing)
+  submitToAppsScript('addTruck', {
+    Code: transporter.code,                     // required for matching in GAS
+    PlateNumber: newTruck.plateNumber,
+    TruckName: newTruck.truckName,
+    TransporterBillingCbm: newTruck.transporterBillingCbm,
+    DredgerBillingCbm: newTruck.dredgerBillingCbm,
+    Status: newTruck.status,
+  }, () => {
+    console.log("Truck added to GAS successfully");
+    // Optional: reload transporters from sheet if needed
+    // loadDataFromSheets();
+  });
 
   // Close modal & reset form
   setShowAddTruckModal(false);
