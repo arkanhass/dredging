@@ -281,45 +281,65 @@ const DredgingDashboard: React.FC = () => {
       setTransporters(Array.from(transporterMap.values()));
 
       // Trips - updated to respect ActualLoadedCbm
-      const tripRes = await fetch(
+ // Trips - robust version (handles extra columns, defensive access)
+// Trips - ultra-safe version
+const tripRes = await fetch(
   `https://sheets.googleapis.com/v4/spreadsheets/${GOOGLE_SHEETS_CONFIG.spreadsheetId}/values/Trips?key=${GOOGLE_SHEETS_CONFIG.apiKey}`
 );
-const tripData = await tripRes.json();
 
-console.log("Trips sheet - number of rows:", tripData.values?.length || 0);
-console.log("First data row (index 1):", tripData.values?.[1]);
-console.log("Column count in first row:", tripData.values?.[1]?.length || 0);
+let tripData;
+try {
+  tripData = await tripRes.json();
+  console.log("Trips raw fetch success - values length:", tripData.values?.length || 0);
+  console.log("Sample row 1:", tripData.values?.[1]);
+} catch (fetchErr) {
+  console.error("Trips fetch/parse failed:", fetchErr);
+  setTrips([]);
+  return; // stop further processing
+}
+
+if (!tripData || !Array.isArray(tripData.values) || tripData.values.length <= 1) {
+  console.warn("No valid Trips data from sheet");
+  setTrips([]);
+  return;
+}
 
 try {
   setTrips(
-    (tripData.values || []).slice(1)
+    tripData.values.slice(1)
       .filter((row: any[]) => {
-        const hasDate = row[0] && row[0].toString().trim() !== "";
-        const hasDredger = row[1] && row[1].toString().trim() !== "";
-        const hasTransporter = row[2] && row[2].toString().trim() !== "";
-        const hasTrips = row[4] && parseInt(row[4]) > 0;
+        if (!Array.isArray(row) || row.length < 5) return false;
+        const hasDate = row[0] && String(row[0]).trim() !== "";
+        const hasDredger = row[1] && String(row[1]).trim() !== "";
+        const hasTransporter = row[2] && String(row[2]).trim() !== "";
+        const hasTrips = row[4] && !isNaN(parseInt(row[4])) && parseInt(row[4]) > 0;
         return hasDate && hasDredger && hasTransporter && hasTrips;
       })
       .map((row: any[], i: number) => {
-        const rawDate = row[0] || "";
-        const dredgerCode = (row[1] || "").toString().trim();
-        const transporterCode = (row[2] || "").toString().trim();
-        const plateNumber = (row[3] || "").toString().trim();
+        // Extremely defensive access
+        const rawDate = row[0] ? String(row[0]) : "";
+        const dredgerCode = row[1] ? String(row[1]).trim() : "";
+        const transporterCode = row[2] ? String(row[2]).trim() : "";
+        const plateNumber = row[3] ? String(row[3]).trim() : "";
 
-        const transporter = transporterMap.get(transporterCode);
-        const truck = transporter?.trucks?.find((t: any) =>
-          (t.plateNumber || "").trim().toUpperCase() === plateNumber.toUpperCase()
-        ) || null; // defensive: null if undefined
+        const transporter = transporterMap.get(transporterCode) || null;
+        let truck = null;
+        if (transporter && Array.isArray(transporter.trucks)) {
+          truck = transporter.trucks.find((t: any) =>
+            t && t.plateNumber && String(t.plateNumber).trim().toUpperCase() === plateNumber.toUpperCase()
+          ) || null;
+        }
 
-        const tripCbmRaw = parseMoney(row[11]);          // column L
-        const actualLoadedCbmRaw = parseMoney(row[12]);  // column M
-        const totalTripsVolumeRaw = parseMoney(row[13]); // column N
+        const tripCbmRaw = parseMoney(row[11]);
+        const actualLoadedCbmRaw = parseMoney(row[12]);
+        const totalTripsVolumeRaw = parseMoney(row[13]);
 
-        const tripsCount = parseInt(row[4]) || 0;
+        const tripsCount = Number(row[4]) || 0;
         const dredgerRate = parseMoney(row[5]) || 0;
-        const transporterRate = parseMoney(row[6]) || truck?.ratePerCbm || transporter?.ratePerCbm || 0;
-        const dredgerAmount = parseMoney(row[9]);
-        const transporterAmount = parseMoney(row[10]);
+        const transporterRate = parseMoney(row[6]) || (truck ? truck.ratePerCbm : 0) || (transporter ? transporter.ratePerCbm : 0) || 0;
+
+        const dredgerAmount = parseMoney(row[9]) || 0;
+        const transporterAmount = parseMoney(row[10]) || 0;
 
         const tripCbm = actualLoadedCbmRaw !== null && actualLoadedCbmRaw > 0
           ? actualLoadedCbmRaw
@@ -331,16 +351,18 @@ try {
           ? totalTripsVolumeRaw
           : tripsCount * tripCbm;
 
-        const billedTransporterAmount = transporterAmount !== null
+        const billedTransporterAmount = transporterAmount > 0
           ? transporterAmount
           : tripsCount * tripCbm * transporterRate;
 
-        const billedDredgerAmount = dredgerAmount !== null
+        const billedDredgerAmount = dredgerAmount > 0
           ? dredgerAmount
           : tripsCount * tripCbm * dredgerRate;
 
-        // Reference: try to read from column O (index 14), fallback if missing/extra columns
-        const ref = row[14] ? String(row[14]).trim() : `trip-ref-${i}-${Date.now()}`;
+        // Reference: only if column exists and has value
+        const ref = (row.length > 14 && row[14] && String(row[14]).trim())
+          ? String(row[14]).trim()
+          : `trip-ref-${i}-${Date.now()}`;
 
         const rowNumber = i + 2;
 
@@ -360,17 +382,18 @@ try {
           transporterAmount: billedTransporterAmount,
           tripCbm,
           totalTripsVolume: totalVolume,
-          dumpingLocation: row[7] || "",
-          notes: row[8] || "",
+          dumpingLocation: row[7] ? String(row[7]) : "",
+          notes: row[8] ? String(row[8]) : "",
           reference: ref,
           rowNumber,
           actualLoadedCbm: actualLoadedCbmRaw ?? undefined,
         } satisfies Trip;
       })
   );
+  console.log("Trips successfully processed and set:", trips.length);
 } catch (tripsError) {
-  console.error("Trips loading/processing failed:", tripsError);
-  setTrips([]); // prevent crash - show empty table
+  console.error("Critical error in Trips processing:", tripsError);
+  setTrips([]); // ensure page renders even if Trips fail
 }
       // Payments (unchanged)
       const payRes = await fetch(
