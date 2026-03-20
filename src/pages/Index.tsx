@@ -334,8 +334,9 @@ const DredgingDashboard: React.FC = () => {
           const transporter = transporterMap.get(transporterCode);
           const truck = transporter?.trucks.find((t: any) => (t.plateNumber || "").trim().toUpperCase() === plateNumber.toUpperCase());
 
-          const tripCbmRaw = parseMoney(row[11]);
-          const totalTripsVolumeRaw = parseMoney(row[12]);
+          const tripCbmRaw           = parseMoney(row[11]);           // TripCBM (standard per trip)
+const actualLoadedCbmRaw   = parseMoney(row[12]);           // ← ActualLoadedCbm (underload override)
+const totalTripsVolumeRaw  = null;                           // Not present → always calculate
 
           const tripsCount = parseInt(row[4]) || 0;
           const dredgerRate = parseMoney(row[5]) || 0;
@@ -343,13 +344,14 @@ const DredgingDashboard: React.FC = () => {
           const dredgerAmount = parseMoney(row[9]);
           const transporterAmount = parseMoney(row[10]);
 
-          const tripCbm = tripCbmRaw !== null && tripCbmRaw > 0
-            ? tripCbmRaw
-            : (truck?.transporterBillingCbm || truck?.capacityCbm || 0);
+         // Then later in the map:
+const tripCbm = actualLoadedCbmRaw !== null && actualLoadedCbmRaw > 0
+  ? actualLoadedCbmRaw
+  : (tripCbmRaw !== null && tripCbmRaw > 0
+      ? tripCbmRaw
+      : (truck?.transporterBillingCbm || truck?.dredgerBillingCbm || truck?.capacityCbm || 0));
 
-          const totalVolume = totalTripsVolumeRaw !== null && totalTripsVolumeRaw > 0
-            ? totalTripsVolumeRaw
-            : tripsCount * tripCbm;
+const totalVolume = tripsCount * tripCbm;  // always calculate since no TotalTripsVolume
           const billedTransporterAmount = transporterAmount !== null
             ? transporterAmount
             : tripsCount * tripCbm * transporterRate;
@@ -672,23 +674,22 @@ const DredgingDashboard: React.FC = () => {
     }
 
     const tripData = {
-      Date: newTrip.date,
-      DredgerCode: dredger?.code || "",
-      TransporterCode: transporter?.code || "",
-      PlateNumber: truck?.plateNumber || "",
-      Trips: tripsCount,
-      DredgerRate: dredgerRate,
-      TransporterRate: transporterRate,
-      DumpingLocation: newTrip.dumpingLocation || "",
-      Notes: newTrip.notes || "",
-      DredgerAmount: dredgerAmount,
-      TransporterAmount: transporterAmount,
-      TransporterBillingCbm: tripCbmVal,
-      DredgerBillingCbm: totalTripsVolume,
-      Reference: newTrip.reference,
-      rowNumber: oldItem?.rowNumber,
-      Row: oldItem?.rowNumber
-    };
+  Date: newTrip.date,
+  DredgerCode: dredger?.code || "",
+  TransporterCode: transporter?.code || "",
+  PlateNumber: truck?.plateNumber || "",
+  Trips: tripsCount,
+  DredgerRate: dredgerRate,
+  TransporterRate: transporterRate,
+  DumpingLocation: newTrip.dumpingLocation || "",
+  Notes: newTrip.notes || "",
+  DredgerAmount: dredgerAmount,
+  TransporterAmount: transporterAmount,
+  TripCBM: tripCbmVal,                     // standard per-trip CBM
+  ActualLoadedCbm: tripForm.actualLoadedCbm ?? "",  // ← send the override if filled
+  // No TotalTripsVolume – it will be calculated on load
+  // If you want to keep Reference, add it here (but column is missing)
+};
 
     const action = oldItem ? "updateTrip" : "saveTrip";
 
