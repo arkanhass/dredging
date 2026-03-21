@@ -271,7 +271,7 @@ const formatCurrency = (value: number | null | undefined): string => {
   }).format(value);
 };
 const dashboardTrips = useMemo(() => {
-  let filtered = trips;
+  let filtered = trips || [];  // ← fallback to empty array if trips is undefined/null
 
   if (dashboardDateFilter.start) {
     const startDate = new Date(dashboardDateFilter.start);
@@ -296,7 +296,7 @@ const dashboardTrips = useMemo(() => {
 const dashboardPayments = useMemo(() => payments, [payments]);
   
 // Calculate earnings for a single dredger
-const calculateDredgerEarnings = (dredgerId: string, filteredTrips: Trip[], filteredPayments: Payment[]) => {
+const calculateDredgerEarnings = (dredgerId: string, filteredTrips: Trip[]= [], filteredPayments: Payment[]= []) => {
   const relevantTrips = filteredTrips.filter(t => t.dredgerId === dredgerId);
 
   const totalVolume = relevantTrips.reduce((sum, t) => sum + (t.totalVolume || 0), 0);
