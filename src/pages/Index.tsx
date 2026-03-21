@@ -296,12 +296,13 @@ const dashboardTrips = useMemo(() => {
 const dashboardPayments = useMemo(() => payments, [payments]);
   
 // Calculate earnings for a single dredger
-const calculateDredgerEarnings = (dredgerId: string, filteredTrips: Trip[] = [], filteredPayments: Payment[] = []) => {
+const calculateDredgerEarnings = (dredgerId: string, filteredTrips: Trip[], filteredPayments: Payment[]) => {
   const relevantTrips = filteredTrips.filter(t => t.dredgerId === dredgerId);
 
   const totalVolume = relevantTrips.reduce((sum, t) => sum + (t.totalVolume || 0), 0);
   const totalAmount = relevantTrips.reduce((sum, t) => sum + (t.dredgerAmount || 0), 0);
 
+  // FIXED: use filteredPayments instead of global payments
   const totalPaid = filteredPayments
     .filter(p => p.entityType === "dredger" && p.entityId === dredgerId)
     .reduce((sum, p) => sum + (p.amount || 0), 0);
