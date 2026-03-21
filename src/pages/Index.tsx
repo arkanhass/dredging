@@ -296,14 +296,13 @@ const dashboardTrips = useMemo(() => {
 const dashboardPayments = useMemo(() => payments, [payments]);
   
 // Calculate earnings for a single dredger
-const calculateDredgerEarnings = (dredgerId: string, filteredTrips: Trip[], filteredPayments: Payment[]) => {
+const calculateDredgerEarnings = (dredgerId: string, filteredTrips: Trip[] = [], filteredPayments: Payment[] = []) => {
   const relevantTrips = filteredTrips.filter(t => t.dredgerId === dredgerId);
-  
+
   const totalVolume = relevantTrips.reduce((sum, t) => sum + (t.totalVolume || 0), 0);
   const totalAmount = relevantTrips.reduce((sum, t) => sum + (t.dredgerAmount || 0), 0);
-  
-  // Payments to this dredger
-  const totalPaid = payments
+
+  const totalPaid = filteredPayments
     .filter(p => p.entityType === "dredger" && p.entityId === dredgerId)
     .reduce((sum, p) => sum + (p.amount || 0), 0);
 
@@ -314,7 +313,6 @@ const calculateDredgerEarnings = (dredgerId: string, filteredTrips: Trip[], filt
     balance: totalAmount - totalPaid,
   };
 };
-
 // Calculate earnings for a single transporter
 const calculateTransporterEarnings = (transporterId: string) => {
   const relevantTrips = trips.filter(t => t.transporterId === transporterId);
@@ -549,7 +547,7 @@ useEffect(() => {
         }))
         .filter((d: any) => d.code);
       setDredgers(loadedDredgers);
-
+console.log("Loaded dredgers:", loadedDredgers);  // ← add this
       // Transporters & Trucks (unchanged)
       const trRes = await fetch(
         `https://sheets.googleapis.com/v4/spreadsheets/${GOOGLE_SHEETS_CONFIG.spreadsheetId}/values/Transporters?key=${GOOGLE_SHEETS_CONFIG.apiKey}`
